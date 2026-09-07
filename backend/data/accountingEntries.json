@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "entryDate": "2026-09-05",
+    "reference": "DEMO-MATERIAL-001",
+    "account": "Raw materials",
+    "debit": 840,
+    "credit": 0,
+    "memo": "Aluminum plate purchase"
+  },
+  {
+    "id": 2,
+    "entryDate": "2026-09-05",
+    "reference": "DEMO-MATERIAL-001",
+    "account": "Accounts payable",
+    "debit": 0,
+    "credit": 840,
+    "memo": "Supplier liability"
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "Standard Gear Assembly",
+    "sku": "PROD-001",
+    "description": "Finished gear assembly",
+    "unitPrice": 125.5,
+    "active": true
+  },
+  {
+    "id": 2,
+    "name": "Hydraulic Manifold",
+    "sku": "DEMO-ERP-2026-MANIFOLD",
+    "description": "Five-port aluminum hydraulic manifold",
+    "unitPrice": 485,
+    "active": true
+  },
+  {
+    "id": 3,
+    "name": "Precision Shaft",
+    "sku": "DEMO-ERP-2026-SHAFT",
+    "description": "Ground steel drive shaft",
+    "unitPrice": 215,
+    "active": true
+  }
+]

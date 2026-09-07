@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "equipmentId": "CNC-001",
+    "title": "CNC Mill preventive maintenance",
+    "description": "Inspect spindle, coolant system, and tooling alignment.",
+    "scheduledDate": "2026-09-10",
+    "status": "scheduled",
+    "priority": "medium"
+  },
+  {
+    "id": 2,
+    "equipmentId": "CNC-001",
+    "title": "Spindle lubrication",
+    "description": "Scheduled lubrication before manifold run.",
+    "scheduledDate": "2026-09-08",
+    "status": "scheduled",
+    "priority": "high"
+  }
+]

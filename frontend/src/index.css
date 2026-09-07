@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #17252b;
+  --muted: #6d7c82;
+  --canvas: #f2f5f3;
+  --surface: #ffffff;
+  --surface-soft: #f7faf8;
+  --line: #dce6e1;
+  --navy: #18343a;
+  --teal: #137c73;
+  --teal-dark: #0d625b;
+  --teal-soft: #e2f3ee;
+  --amber: #b76b16;
+  --danger: #b42318;
+  --shadow: 0 14px 38px rgba(27, 54, 56, 0.08);
+  --shadow-small: 0 4px 16px rgba(27, 54, 56, 0.08);
+  --sans: "Avenir Next", "Segoe UI", sans-serif;
+  --heading: "Trebuchet MS", "Segoe UI", sans-serif;
+
+  color: var(--ink);
+  background: var(--canvas);
+  font: 15px/1.5 var(--sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--canvas);
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  color: var(--ink);
+}
+
+h1 {
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.7px;
+}
+h2 {
+  font-size: 20px;
+  line-height: 1.25;
+}
+p {
+  margin: 0;
+}
+
+.app-content {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  padding: 42px clamp(24px, 4vw, 64px);
+  width: 100%;
+}
+
+.page-loading {
+  color: var(--muted);
+  padding: 64px 0;
+}

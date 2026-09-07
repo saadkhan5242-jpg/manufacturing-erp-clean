@@ -1,0 +1,41 @@
+[
+  {
+    "id": 1,
+    "orderNumber": "SO-0001",
+    "customer": "Northstar Fabrication",
+    "status": "confirmed",
+    "dueDate": "2026-09-18",
+    "lines": [
+      {
+        "productId": 1,
+        "quantity": 5
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "orderNumber": "DEMO-ERP-2026-SO-001",
+    "customer": "Atlas Fluid Systems",
+    "status": "confirmed",
+    "dueDate": "2026-09-18",
+    "lines": [
+      {
+        "productId": 2,
+        "quantity": 12
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "orderNumber": "DEMO-ERP-2026-SO-002",
+    "customer": "Meridian Automation",
+    "status": "in-production",
+    "dueDate": "2026-09-15",
+    "lines": [
+      {
+        "productId": 3,
+        "quantity": 24
+      }
+    ]
+  }
+]

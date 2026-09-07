@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "workOrderId": 1001,
+    "workCenterId": 1,
+    "startTime": "2026-09-05T08:00:00.000Z",
+    "endTime": "2026-09-05T12:00:00.000Z",
+    "status": "scheduled"
+  }
+]

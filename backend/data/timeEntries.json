@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "operatorId": 1,
+    "operatorName": "Operations Admin",
+    "workOrderId": 4,
+    "workCenterId": 1,
+    "operation": "CNC mill manifold ports",
+    "startTime": "2026-09-05T07:00:00.000Z",
+    "endTime": "2026-09-05T09:30:00.000Z",
+    "laborRate": 38,
+    "machineRate": 72,
+    "demoTag": "DEMO-ERP-2026"
+  }
+]

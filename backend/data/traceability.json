@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "barcode": "LOT-DEMO-AL-001",
+    "partNumber": "AL-PLATE-10MM",
+    "workOrderId": 4,
+    "event": "consumed",
+    "quantity": 10
+  },
+  {
+    "id": 2,
+    "barcode": "LOT-DEMO-STEEL-001",
+    "partNumber": "STEEL-BAR-32MM",
+    "workOrderId": 5,
+    "event": "issued",
+    "quantity": 24
+  }
+]

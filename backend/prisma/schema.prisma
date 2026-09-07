@@ -1,0 +1,149 @@
+// ============================================================
+// GSS Manufacturing ERP — Prisma ORM reference schema for the
+// WIP Tracking Engine (Module: Live Jobs + Daily Shipments).
+//
+// NOTE: This project executes raw parameterized SQL through pg
+// (backend/db/pool.js) with versioned migrations in
+// backend/db/migrations/. This .prisma file is the canonical
+// relational reference matching migration 006_wip_shipping_engine.js
+// — use it with `npx prisma db pull`/`prisma generate` if the
+// team later adopts the Prisma client.
+// ============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "debian-openssl-1.1.x", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SalesOrder {
+  id              BigInt    @id @default(autoincrement()) @db.BigInt
+  orderNumber     String    @unique @map("order_number")
+  customerId      String    @map("customer_id")
+  productId       BigInt?   @map("product_id") @db.BigInt
+  quantityOrdered Decimal   @map("quantity_ordered") @db.Decimal(14, 4)
+  unitPrice       Decimal   @default(0) @map("unit_price") @db.Decimal(14, 2)
+  requiredDate    DateTime? @map("required_date") @db.Date
+  status          String    @default("Open")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrders      WorkOrder[]
+
+  @@index([customerId])
+  @@index([requiredDate])
+  @@map("sales_orders")
+}
+
+model WorkOrder {
+  id                BigInt    @id @default(autoincrement()) @db.BigInt
+  orderNumber       String    @unique @map("order_number")
+  partNumber        String    @map("part_number")
+  itemId            BigInt?   @map("item_id") @db.BigInt
+  salesOrderId      BigInt?   @map("sales_order_id") @db.BigInt
+  quantity          Decimal   @db.Decimal(14, 4)
+  quantityOrdered   Decimal   @default(0) @map("quantity_ordered") @db.Decimal(14, 4)
+  quantityCompleted Decimal   @default(0) @map("quantity_completed") @db.Decimal(14, 4)
+  status            String    @default("open")
+  dueDate           DateTime? @map("due_date") @db.Date
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  salesOrder        SalesOrder?       @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  routingSteps      JobRouting[]
+  laborTransactions LaborTransaction[]
+  wipLedgerEntries  WipLedger[]
+  shipments         Shipment[]
+
+  @@index([salesOrderId])
+  @@map("work_orders")
+}
+
+model JobRouting {
+  id              BigInt @id @default(autoincrement()) @db.BigInt
+  workOrderId     BigInt @map("work_order_id") @db.BigInt
+  workCenterCode  String @map("work_center_code")
+  sequenceNumber  Int    @map("sequence_number")
+  estimatedHours  Decimal @default(0) @map("estimated_hours") @db.Decimal(10, 2)
+  actualHours     Decimal @default(0) @map("actual_hours") @db.Decimal(10, 2)
+  status          String  @default("Pending")
+
+  workOrder        WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  laborTransactions LaborTransaction[]
+
+  @@unique([workOrderId, sequenceNumber])
+  @@index([workCenterCode])
+  @@map("job_routing")
+}
+
+model LaborTransaction {
+  id             BigInt    @id @default(autoincrement()) @db.BigInt
+  employeeId     String    @map("employee_id")
+  workOrderId    BigInt    @map("work_order_id") @db.BigInt
+  routingStepId  BigInt    @map("routing_step_id") @db.BigInt
+  startTime      DateTime  @default(now()) @map("start_time") @db.Timestamptz(6)
+  endTime        DateTime? @map("end_time") @db.Timestamptz(6)
+  setupHours     Decimal   @default(0) @map("setup_hours") @db.Decimal(10, 2)
+  runHours       Decimal   @default(0) @map("run_hours") @db.Decimal(10, 2)
+  piecesProduced Int       @default(0) @map("pieces_produced")
+  piecesScrapped Int       @default(0) @map("pieces_scrapped")
+  laborCost      Decimal   @default(0) @map("labor_cost") @db.Decimal(12, 2)
+  overheadCost   Decimal   @default(0) @map("overhead_cost") @db.Decimal(12, 2)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  routingStep JobRouting @relation(fields: [routingStepId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([routingStepId])
+  @@map("labor_transactions")
+}
+
+model WipLedger {
+  id          BigInt   @id @default(autoincrement()) @db.BigInt
+  workOrderId BigInt   @map("work_order_id") @db.BigInt
+  entryType   String   @map("entry_type")
+  debit       Decimal  @default(0) @db.Decimal(14, 2)
+  credit      Decimal  @default(0) @db.Decimal(14, 2)
+  reference   String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([entryType])
+  @@map("wip_ledger")
+}
+
+model WorkCenter {
+  id           BigInt  @id @default(autoincrement()) @db.BigInt
+  code         String  @unique
+  name         String
+  laborRate    Decimal @default(0) @map("labor_rate") @db.Decimal(12, 2)
+  machineRate  Decimal @default(0) @map("machine_rate") @db.Decimal(12, 2)
+  overheadRate Decimal @default(0) @map("overhead_rate") @db.Decimal(12, 2)
+  active       Boolean @default(true)
+
+  @@map("work_centers")
+}
+
+model Shipment {
+  id              BigInt   @id @default(autoincrement()) @db.BigInt
+  customerId      String   @map("customer_id")
+  workOrderId     BigInt   @map("work_order_id") @db.BigInt
+  targetShipDate  DateTime @map("target_ship_date") @db.Date
+  actualShipDate  DateTime? @map("actual_ship_date") @db.Date
+  quantityShipped Decimal  @default(0) @map("quantity_shipped") @db.Decimal(14, 4)
+  carrier         String   @default("")
+  status          String   @default("Scheduled")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([targetShipDate])
+  @@map("shipments")
+}

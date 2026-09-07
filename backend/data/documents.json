@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1,
+    "type": "purchase-order",
+    "sourceId": 2,
+    "title": "PURCHASE ORDER",
+    "reference": "DEMO-ERP-2026-PO-001",
+    "createdAt": "2026-09-05T10:00:00.000Z",
+    "content": "Demo document generated from the seeded purchase order."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "name": "Precision Metals Ltd.",
+    "code": "SUP-001",
+    "email": "orders@precision-metals.example",
+    "phone": "+1-555-0100",
+    "active": true
+  }
+]

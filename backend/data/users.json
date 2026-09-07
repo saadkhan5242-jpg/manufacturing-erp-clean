@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "name": "Operations Admin",
+    "email": "admin@global-shop.local",
+    "role": "admin",
+    "active": true,
+    "passwordHash": "$2b$12$HeOqXmZEjwSZ9eY39fFjiuqxr.WzmIYTZpVj6SOU4HUnTsoPPKFsG"
+  }
+]

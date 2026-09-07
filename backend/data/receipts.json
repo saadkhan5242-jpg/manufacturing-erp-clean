@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "purchaseOrderId": 2,
+    "receivedDate": "2026-09-05",
+    "supplierDocument": "GRN-DEMO-001",
+    "status": "partial",
+    "lines": [
+      {
+        "productId": 2,
+        "quantity": 10
+      }
+    ]
+  }
+]

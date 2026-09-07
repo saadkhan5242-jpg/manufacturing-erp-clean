@@ -1,0 +1,25 @@
+[
+  {
+    "id": 1,
+    "workOrderId": 1,
+    "inspectionType": "First article",
+    "status": "pending",
+    "result": ""
+  },
+  {
+    "id": 2,
+    "workOrderId": 4,
+    "inspectionType": "First article",
+    "status": "passed",
+    "result": "Pass - port depth verified",
+    "notes": "Approved by quality for batch production."
+  },
+  {
+    "id": 3,
+    "workOrderId": 5,
+    "inspectionType": "In-process",
+    "status": "pending",
+    "result": "",
+    "notes": "Awaiting first ground shaft."
+  }
+]

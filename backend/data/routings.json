@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "productId": 1,
+    "revision": "A",
+    "status": "active",
+    "steps": [
+      {
+        "sequence": 10,
+        "operation": "CNC mill housing",
+        "workCenterId": 1,
+        "setupMinutes": 30,
+        "runMinutes": 45,
+        "instructions": "Verify datum alignment before first-off inspection."
+      },
+      {
+        "sequence": 20,
+        "operation": "Laser cut bracket",
+        "workCenterId": 2,
+        "setupMinutes": 15,
+        "runMinutes": 20,
+        "instructions": "Deburr all edges and verify hole pattern."
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "productId": 2,
+    "revision": "A",
+    "status": "active",
+    "steps": [
+      {
+        "sequence": 10,
+        "operation": "CNC mill manifold ports",
+        "workCenterId": 1,
+        "setupMinutes": 35,
+        "runMinutes": 22,
+        "instructions": "Probe stock and verify port depth."
+      },
+      {
+        "sequence": 20,
+        "operation": "Pressure test",
+        "workCenterId": 2,
+        "setupMinutes": 10,
+        "runMinutes": 8,
+        "instructions": "Test at 180 bar for 60 seconds."
+      }
+    ]
+  }
+]

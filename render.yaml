@@ -1,0 +1,44 @@
+services:
+  # 1. Backend Web Service
+  - type: web
+    name: manufacturing-erp-backend
+    env: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: erp-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ERP_ADMIN_PASSWORD
+        value: Shadow1234
+      - key: SUPERVISOR_PIN
+        value: "2468"
+
+  # 2. Frontend Static Site
+  - type: web
+    name: manufacturing-erp-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: manufacturing-erp-backend
+          property: host
+
+databases:
+  # Render Managed PostgreSQL Database
+  - name: erp-postgres
+    databaseName: manufacturing_erp
+    user: erp_user
+    plan: free

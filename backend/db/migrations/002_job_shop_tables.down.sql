@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS schedules;
+DROP TABLE IF EXISTS work_orders;
+DROP TABLE IF EXISTS work_centers;

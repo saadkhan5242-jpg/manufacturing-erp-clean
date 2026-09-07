@@ -1,0 +1,20 @@
+{
+  "appId": "com.globalshop.erp",
+  "productName": "Global Shop ERP",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ],
+  "win": {
+    "target": ["nsis"],
+    "artifactName": "Global-Shop-ERP-Setup-${version}.exe"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

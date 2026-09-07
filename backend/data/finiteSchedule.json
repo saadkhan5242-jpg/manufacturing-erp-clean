@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "workOrderId": 4,
+    "workCenterId": 1,
+    "startTime": "2026-09-08T08:00:00.000Z",
+    "endTime": "2026-09-08T14:00:00.000Z",
+    "status": "dispatched"
+  },
+  {
+    "id": 2,
+    "workOrderId": 5,
+    "workCenterId": 3,
+    "startTime": "2026-09-08T08:00:00.000Z",
+    "endTime": "2026-09-08T16:00:00.000Z",
+    "status": "planned"
+  }
+]

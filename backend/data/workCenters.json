@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "CNC Mill",
+    "code": "WC-100",
+    "dailyCapacityHours": 8,
+    "capacityHoursPerDay": 8,
+    "laborRate": 38,
+    "machineRate": 72
+  },
+  {
+    "id": 2,
+    "name": "Laser Cutter",
+    "code": "WC-200",
+    "dailyCapacityHours": 6,
+    "capacityHoursPerDay": 6,
+    "laborRate": 34,
+    "machineRate": 58
+  },
+  {
+    "id": 3,
+    "name": "CNC Lathe",
+    "code": "DEMO-ERP-2026-LATHE",
+    "dailyCapacityHours": 8,
+    "capacityHoursPerDay": 8,
+    "laborRate": 40,
+    "machineRate": 68
+  },
+  {
+    "id": 4,
+    "name": "Welding Cell",
+    "code": "DEMO-ERP-2026-WELD",
+    "dailyCapacityHours": 7,
+    "capacityHoursPerDay": 7,
+    "laborRate": 36,
+    "machineRate": 52
+  }
+]

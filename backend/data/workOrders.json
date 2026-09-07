@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "partNumber": "P-1001",
+    "quantity": 50,
+    "status": "Open",
+    "dueDate": "2026-09-10"
+  },
+  {
+    "id": 2,
+    "partNumber": "P-2002",
+    "quantity": 20,
+    "status": "In Progress",
+    "dueDate": "2026-09-12"
+  },
+  {
+    "id": 3,
+    "partNumber": "24201",
+    "quantity": 15,
+    "status": "Open"
+  },
+  {
+    "id": 4,
+    "partNumber": "121",
+    "quantity": 12,
+    "status": "Open"
+  },
+  {
+    "id": 4,
+    "partNumber": "DEMO-ERP-2026-MANIFOLD",
+    "quantity": 12,
+    "status": "In Progress",
+    "dueDate": "2026-09-15",
+    "salesOrderNumber": "DEMO-ERP-2026-SO-001"
+  },
+  {
+    "id": 5,
+    "partNumber": "DEMO-ERP-2026-SHAFT",
+    "quantity": 24,
+    "status": "Open",
+    "dueDate": "2026-09-17",
+    "salesOrderNumber": "DEMO-ERP-2026-SO-002"
+  }
+]

@@ -1,0 +1,203 @@
+/* ============================================================
+   FULCRUM ERP INSPIRED PREMIUM DARK ARCHITECTURE SHEETS
+   ============================================================ */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0f17 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Master Workstation Container Grid */
+.erp-dashboard-container {
+  padding: 20px;
+  background-color: #0b0f17;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Elite Compact Taskbar Control Header */
+.gss-header-console {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #111823;
+  border: 1px solid #1f293d;
+  padding: 12px 20px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+/* Navigation System Control Blocks */
+.nav-spawner-btn {
+  background-color: #1a2333;
+  border: 1px solid #2d3d54;
+  color: #9ca3af;
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+.nav-spawner-btn:hover {
+  border-color: #38bdf8;
+  color: #fff;
+}
+.nav-spawner-btn.active {
+  background-color: #0284c7;
+  border-color: #38bdf8;
+  color: #fff;
+}
+
+/* Telemetry Grid Metric Cards */
+.telemetry-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.metric-card-cell {
+  background-color: #111823;
+  border: 1px solid #1f293d;
+  padding: 12px;
+  border-radius: 6px;
+}
+.metric-card-label {
+  display: block;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.metric-card-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+/* Dynamic Multi-Window Transactional Container Panels */
+.transaction-window-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.window-pane-card {
+  background-color: #111823;
+  border: 1px solid #1f293d;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+.window-pane-header {
+  background-color: #1a2333;
+  border-bottom: 1px solid #2d3d54;
+  color: #fff;
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.window-pane-body {
+  padding: 16px;
+  background-color: #111823;
+}
+
+/* Data-Dense Spreadsheet Matrix Overlays */
+.gss-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background-color: #111823;
+}
+.gss-data-table th {
+  background-color: #0b0f17;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  border: 1px solid #1f293d;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.gss-data-table td {
+  padding: 10px 12px;
+  border: 1px solid #1f293d;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+.gss-data-table tr:nth-child(even) {
+  background-color: #141d2f;
+}
+
+/* Brand mark + console meta */
+.gss-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #f3f4f6;
+  letter-spacing: 0.04em;
+}
+.gss-brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background-color: #f97316;
+}
+.gss-console-meta {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Window pane close key */
+.window-pane-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s ease;
+}
+.window-pane-close:hover {
+  color: #f87171;
+}
+
+/* Empty matrix state */
+.matrix-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 80px 20px;
+  color: #475569;
+  border: 1px dashed #2d3d54;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Section label strip */
+.matrix-section-label {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 2px 0;
+}

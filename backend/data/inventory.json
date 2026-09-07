@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "name": "Steel Sheet",
+    "sku": "MAT-STEEL-001",
+    "quantityOnHand": 120,
+    "reorderPoint": 40,
+    "location": "Raw Materials A"
+  },
+  {
+    "id": 2,
+    "name": "M8 Hex Bolt",
+    "sku": "HW-BOLT-M8",
+    "quantityOnHand": 850,
+    "reorderPoint": 250,
+    "location": "Hardware Bin 12"
+  },
+  {
+    "id": 3,
+    "name": "Aluminum Plate 10mm",
+    "sku": "DEMO-ERP-2026-AL-PLATE",
+    "quantityOnHand": 18,
+    "reorderPoint": 25,
+    "location": "Raw Materials B"
+  },
+  {
+    "id": 4,
+    "name": "Seal Kit 05",
+    "sku": "DEMO-ERP-2026-SEAL",
+    "quantityOnHand": 64,
+    "reorderPoint": 20,
+    "location": "Kitting Shelf 04"
+  }
+]
