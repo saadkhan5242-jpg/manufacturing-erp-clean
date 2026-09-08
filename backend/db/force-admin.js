@@ -1,5 +1,5 @@
-import pool from './pool.js';
-import bcrypt from 'bcryptjs'; // Changed to match your project's native library format
+import { pool } from './pool.js'; // Destructured named connector matching your export syntax exactly
+import bcrypt from 'bcryptjs';
 
 async function injectAdmin() {
   console.log("👤 Connecting via pg pool to inject master administrator profile...");
@@ -8,6 +8,9 @@ async function injectAdmin() {
   const rawPassword = "ERPadmin2026Secure!";
   const name = "System Admin";
   const role = "admin";
+
+  // Use the active configuration parameter or fallback to local connector definitions smoothly
+  const db = pool || global.pool;
 
   try {
     const saltRounds = 10;
@@ -20,13 +23,15 @@ async function injectAdmin() {
       DO UPDATE SET password_hash = $4, role = $3, name = $1;
     `;
 
-    await pool.query(queryText, [name, email, role, passwordHash]);
+    await db.query(queryText, [name, email, role, passwordHash]);
     console.log(`  ✅ Root administrator account successfully established/reset for: ${email}`);
     
   } catch (err) {
     console.error("❌ Direct seed insertion failed:", err.message);
   } finally {
-    await pool.end();
+    if (db && typeof db.end === 'function') {
+      await db.end();
+    }
     console.log("🏁 Database injection routine complete.");
   }
 }
