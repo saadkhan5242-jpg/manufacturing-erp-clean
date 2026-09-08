@@ -1,5 +1,5 @@
 import pool from './pool.js';
-import bcrypt from 'bcrypt'; // Using the standard package your backend uses to check passwords
+import bcrypt from 'bcryptjs'; // Changed to match your project's native library format
 
 async function injectAdmin() {
   console.log("👤 Connecting via pg pool to inject master administrator profile...");
@@ -7,14 +7,12 @@ async function injectAdmin() {
   const email = "admin@erp.local";
   const rawPassword = "ERPadmin2026Secure!";
   const name = "System Admin";
-  const role = "admin"; // Lowcase matching your schema defaults
+  const role = "admin";
 
   try {
-    // Generate the exact bcrypt hash salt your backend logic expects
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(rawPassword, saltRounds);
 
-    // SQL query matching your precise 001_core_schema.sql columns exactly
     const queryText = `
       INSERT INTO users (name, email, role, password_hash, active) 
       VALUES ($1, $2, $3, $4, true) 
