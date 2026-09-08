@@ -90,8 +90,6 @@ async function main() {
   console.log("  🚚 Seeding shipment tracking rows for the Daily Shipment Dashboard...");
 
   try {
-    // Map the high-density tracking keys onto the Shipment model's real columns:
-    //   customerAccount -> customerId, carrierRef -> carrier, targetShipDate -> targetShipDate
     const shipmentData = {
       customerId: "CUST-NORTHSTAR",          // customerAccount
       workOrderId: testJob.id,               // linked parent work order (WO-1001)
@@ -101,7 +99,6 @@ async function main() {
       status: "SCHEDULED"
     };
 
-    // Idempotent: only insert if WO-1001 has no shipment row yet
     const existingShipment = await prisma.shipment.findFirst({
       where: { workOrderId: testJob.id }
     });
@@ -114,6 +111,44 @@ async function main() {
     }
   } catch (shipErr) {
     console.log("  ⚠️ Shipment seed skipped safely:", shipErr.message);
+  }
+
+  // ---------- 5. SEED DEFAULT ADMIN USER PROFILE ----------
+  console.log("  👤 Seeding system default master administrator profile...");
+  
+  const adminPayload = {
+    email: process.env.ERP_ADMIN_EMAIL || "admin@erp.local",
+    password: process.env.ERP_ADMIN_PASSWORD || "ERPadmin2026Secure!",
+    name: process.env.ERP_ADMIN_USERNAME || "admin"
+  };
+
+  // Add the role property dynamically if your user table utilizes explicit roles
+  if ('role' in prisma.user.fields) {
+    adminPayload.role = "ADMIN";
+  }
+
+  try {
+    await prisma.user.upsert({
+      where: { email: adminPayload.email },
+      update: {},
+      create: adminPayload
+    });
+    console.log(`  ✅ Root administrator successfully added for: ${adminPayload.email}`);
+  } catch (userErr) {
+    console.log("  ⚠️ Dynamic user tracking constraint fallback requested...");
+    try {
+      // Direct raw creation fallback in case schema validation blocks upsert variants
+      await prisma.user.create({
+        data: {
+          email: "admin@erp.local",
+          password: "ERPadmin2026Secure!",
+          name: "Admin"
+        }
+      });
+      console.log("  ✅ Baseline administrator profile established.");
+    } catch (err2) {
+      console.log("  ⏭️ User entry already present or database row blocked.");
+    }
   }
 
   console.log("🏁 Global Shop Seeding Protocol complete.");
