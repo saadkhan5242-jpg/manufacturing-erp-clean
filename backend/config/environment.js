@@ -15,10 +15,18 @@ export function validateEnvironment() {
   }
 
   if (process.env.FRONTEND_ORIGIN) {
-    try {
-      new URL(process.env.FRONTEND_ORIGIN);
-    } catch {
-      throw new Error("FRONTEND_ORIGIN must be a valid URL");
+    const origin = process.env.FRONTEND_ORIGIN.trim();
+    if (origin !== "development" && origin !== "*") {
+      if (origin.endsWith("/")) {
+        throw new Error("FRONTEND_ORIGIN must not end with a trailing slash");
+      }
+      try {
+        new URL(origin);
+      } catch {
+        if (process.env.NODE_ENV === "production") {
+          throw new Error("FRONTEND_ORIGIN must be a valid URL");
+        }
+      }
     }
   }
 }
