@@ -1,5 +1,29 @@
 const requiredProductionVariables = ["DATABASE_URL", "JWT_SECRET", "ERP_ADMIN_PASSWORD"];
 
+function splitOrigins(value) {
+  return String(value || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function validateOriginList(name) {
+  for (const origin of splitOrigins(process.env[name])) {
+    if (origin !== "development" && origin !== "*") {
+      if (origin.endsWith("/")) {
+        throw new Error(`${name} entries must not end with a trailing slash`);
+      }
+      try {
+        new URL(origin);
+      } catch {
+        if (process.env.NODE_ENV === "production") {
+          throw new Error(`${name} must contain valid URL entries`);
+        }
+      }
+    }
+  }
+}
+
 export function validateEnvironment() {
   const missing = requiredProductionVariables.filter((name) => process.env.NODE_ENV === "production" && !process.env[name]);
   if (missing.length > 0) {
@@ -14,19 +38,11 @@ export function validateEnvironment() {
     throw new Error("ERP_ADMIN_PASSWORD must be at least 8 characters");
   }
 
-  if (process.env.FRONTEND_ORIGIN) {
-    const origin = process.env.FRONTEND_ORIGIN.trim();
-    if (origin !== "development" && origin !== "*") {
-      if (origin.endsWith("/")) {
-        throw new Error("FRONTEND_ORIGIN must not end with a trailing slash");
-      }
-      try {
-        new URL(origin);
-      } catch {
-        if (process.env.NODE_ENV === "production") {
-          throw new Error("FRONTEND_ORIGIN must be a valid URL");
-        }
-      }
-    }
+  validateOriginList("FRONTEND_ORIGIN");
+  validateOriginList("FRONTEND_ORIGINS");
+  validateOriginList("VERCEL_PRODUCTION_ORIGIN");
+
+  if (process.env.NODE_ENV === "production" && !process.env.FRONTEND_ORIGIN && !process.env.FRONTEND_ORIGINS && !process.env.VERCEL_PROJECT_SLUG && !process.env.VERCEL_ALLOWED_DOMAINS) {
+    throw new Error("Set FRONTEND_ORIGINS, FRONTEND_ORIGIN, VERCEL_PROJECT_SLUG, or VERCEL_ALLOWED_DOMAINS for production CORS");
   }
 }

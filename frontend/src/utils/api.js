@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../config.js";
+import { API_BASE_URL, LOCAL_API_ORIGIN } from "../config.js";
 
 /* ============================================================
    GLOBAL FETCH SHIM
@@ -9,7 +9,7 @@ import { API_BASE_URL } from "../config.js";
    ============================================================ */
 
 const nativeFetch = window.fetch.bind(window);
-const LOCAL_ORIGIN = "http://localhost:4000";
+const LOCAL_ORIGIN = LOCAL_API_ORIGIN;
 
 function resolveTarget(url) {
   // Absolute local URL -> active API origin (cloud in production)

@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { randomUUID } from "node:crypto";
 import { validateEnvironment } from "./config/environment.js";
+import { corsOptionsDelegate } from "./config/cors.js";
 
 // Master System Routers
 import aiRouter from "./routes/aiRouter.js";
@@ -58,7 +59,7 @@ app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 4000);
 
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN ? process.env.FRONTEND_ORIGIN.replace(/\/+$/, "") : "http://localhost:5173" }));
+app.use(cors(corsOptionsDelegate));
 app.use(express.json());
 app.use(metricsMiddleware);
 app.use((req, res, next) => {

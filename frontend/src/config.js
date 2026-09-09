@@ -6,9 +6,10 @@
    via Vite env var VITE_API_URL (see frontend/.env.production).
    ============================================================ */
 
-const DEV_API_URL = "http://localhost:4000";
+const DEV_API_URL = import.meta.env.VITE_DEV_API_URL || "http://localhost:4000";
 export const API = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || (import.meta.env.DEV ? DEV_API_URL : "");
 export const API_BASE_URL = API;
+export const LOCAL_API_ORIGIN = DEV_API_URL;
 
 /**
  * Rewrite any absolute local API URL to the active API origin.

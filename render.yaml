@@ -4,7 +4,7 @@ services:
     name: manufacturing-erp-backend
     env: node
     rootDir: backend
-    buildCommand: npm install && npx prisma generate
+    buildCommand: npm install && npm run db:migrate && npx prisma generate
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
@@ -18,9 +18,19 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ERP_ADMIN_PASSWORD
-        value: Shadow1234
+        sync: false
       - key: SUPERVISOR_PIN
-        value: "2468"
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false
+      - key: VERCEL_PROJECT_SLUG
+        sync: false
+      - key: VERCEL_ALLOWED_DOMAINS
+        sync: false
+      - key: DATABASE_POOL_MAX
+        value: 5
+      - key: DATABASE_CONNECTION_TIMEOUT_MS
+        value: 8000
 
   # 2. Frontend Static Site
   - type: web
@@ -31,10 +41,7 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: manufacturing-erp-backend
-          property: host
+        sync: false
 
 databases:
   # Render Managed PostgreSQL Database

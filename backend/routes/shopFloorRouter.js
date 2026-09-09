@@ -2,204 +2,260 @@ import { Router } from "express";
 import { PrismaClient } from "@prisma/client";
 import { absorbManufacturingCosts } from "../services/wipLedgerService.js";
 import { verifySupervisorPinHandler } from "../middleware/supervisorAuth.js";
+import { validateBody, validateQuery } from "../middleware/validate.js";
+import { broadcastShopFloorEvent, subscribeToShopFloorEvents } from "../services/shopFloorEventBus.js";
+import { recordQualityCheckpoint } from "../services/qualityCheckpointService.js";
+import { clockInSchema, clockOutSchema, paginationQuerySchema, shopFloorActionSchema } from "../validators/schemas.js";
 
 const router = Router();
 const prisma = new PrismaClient();
+const sortColumns = new Set(["orderNumber", "partNumber", "status", "dueDate", "updatedAt", "efficiency"]);
 
-// 0. POST /api/shopfloor/verify-pin
-// Validates 4-digit supervisor PIN code for quality control & sequence overrides
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function toSerializable(value) {
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(toSerializable);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, toSerializable(item)]));
+  }
+  return value;
+}
+
+function numericIdFilter(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? { id } : null;
+}
+
+function buildWorkOrderWhere(filters) {
+  const where = {};
+  if (filters.status) where.status = filters.status;
+  if (filters.machine) where.routingSteps = { some: { workCenterCode: { contains: filters.machine, mode: "insensitive" } } };
+  if (filters.operatorId) where.laborTransactions = { some: { employeeId: filters.operatorId } };
+  if (filters.operatorStatus === "active") {
+    where.laborTransactions = { some: { ...(where.laborTransactions?.some || {}), endTime: null } };
+  }
+  if (filters.search) {
+    where.OR = [
+      { orderNumber: { contains: filters.search, mode: "insensitive" } },
+      { partNumber: { contains: filters.search, mode: "insensitive" } }
+    ];
+  }
+  return where;
+}
+
+function mapVarianceOrder(order) {
+  const quantity = toNumber(order.quantity || order.quantityOrdered, 0);
+  const estimatedHours = order.routingSteps.reduce((sum, step) => sum + toNumber(step.estimatedHours), 0);
+  const actualHours = order.routingSteps.reduce((sum, step) => sum + toNumber(step.actualHours), 0);
+  const activeLabor = order.laborTransactions.filter((transaction) => !transaction.endTime);
+  const efficiency = actualHours > 0 ? Math.round((estimatedHours / actualHours) * 100) : 0;
+  return {
+    id: String(order.id),
+    jobId: order.orderNumber,
+    partNumber: order.partNumber,
+    status: order.status,
+    dueDate: order.dueDate,
+    qtyOrdered: quantity,
+    qtyCompleted: toNumber(order.quantityCompleted, 0),
+    workCenters: order.routingSteps.map((step) => step.workCenterCode),
+    activeOperators: activeLabor.map((transaction) => transaction.employeeId),
+    efficiency,
+    estimatedHours: estimatedHours.toFixed(2),
+    actualHours: actualHours.toFixed(2)
+  };
+}
+
+async function findWorkOrder(workOrderId, select) {
+  const filters = [{ orderNumber: String(workOrderId) }];
+  const numeric = numericIdFilter(workOrderId);
+  if (numeric) filters.push(numeric);
+  return prisma.workOrder.findFirst({ where: { OR: filters }, select });
+}
+
 router.post("/verify-pin", verifySupervisorPinHandler);
 
-// 1. POST /api/shopfloor/clock-in
-// Captures operator badge scans and writes active machine run state rows to your Neon cloud database
-router.post("/clock-in", async (req, res) => {
-  const { employeeId, workOrderId, routerOperationId, jobStatus } = req.body;
+router.get("/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
 
-  // Adapt defensively to relaxed frontend payload field structures
-  const cleanEmpId = String(employeeId || req.body.employeeNumber || "").trim();
-  const cleanJobId = String(workOrderId || req.body.workOrderNumber || "").trim();
-  const rawSeq = routerOperationId || req.body.sequence || "10";
+  const unsubscribe = subscribeToShopFloorEvents(res);
+  req.on("close", unsubscribe);
+});
 
-  if (!cleanEmpId || !cleanJobId) {
-    return res.status(400).json({ error: "GSS Error: Employee Badge and Work Order number are mandatory tracking fields." });
-  }
+router.post("/clock-in", validateBody(clockInSchema), async (req, res) => {
+  const { employeeId, employeeNumber, workOrderId, workOrderNumber, routerOperationId, sequence, jobStatus } = req.body;
+  const operatorId = employeeId || employeeNumber;
+  const targetWorkOrderId = workOrderId || workOrderNumber;
+  const rawSeq = routerOperationId || sequence || "10";
 
   try {
-    // Scan your cloud WorkOrder table defensively across potential column spellings
-    const targetOrder = await prisma.workOrder.findFirst({
-      where: {
-        OR: [
-          { orderNumber: cleanJobId },
-          { woNumber: cleanJobId }
-        ]
-      }
-    });
+    const targetOrder = await findWorkOrder(targetWorkOrderId, { id: true, orderNumber: true, partNumber: true });
+    if (!targetOrder) return res.status(404).json({ error: "Work order not found", requestId: req.requestId });
 
-    // Open an atomic database transaction to record the machine room punch securely
+    const targetRoute = await prisma.jobRouting.findFirst({
+      where: { workOrderId: targetOrder.id, sequenceNumber: parseInt(rawSeq, 10) || 10 },
+      select: { id: true, sequenceNumber: true, workCenterCode: true }
+    });
+    if (!targetRoute) return res.status(404).json({ error: "Routing operation not found", requestId: req.requestId });
+
     const laborLog = await prisma.$transaction(async (tx) => {
-      
-      const targetRoute = targetOrder ? await tx.jobRouting.findFirst({
-        where: {
+      const created = await tx.laborTransaction.create({
+        data: {
+          employeeId: operatorId,
           workOrderId: targetOrder.id,
-          sequence: parseInt(rawSeq, 10) || 10
-        }
-      }) : null;
-
-      // Base transaction data map configuration matching your layout tables
-      const insertPayload = {
-        employeeId: cleanEmpId,
-        employeeNumber: cleanEmpId,
-        workOrderId: targetOrder ? targetOrder.id : 1,
-        startTime: new Date(),
-        status: String(jobStatus || "RUNNING").toUpperCase(),
-        actualHours: 0.00
-      };
-
-      // Conditionally append foreign keys only if the tracking properties exist in this client instance
-      if (targetRoute) {
-        if ("jobRoutingId" in tx.laborTransaction.fields) insertPayload.jobRoutingId = targetRoute.id;
-        if ("routingStepId" in tx.laborTransaction.fields) insertPayload.routingStepId = targetRoute.id;
-      }
-
-      // Safely strip away fields not declared in schema configuration definitions
-      const activeFields = tx.laborTransaction.fields || {};
-      Object.keys(insertPayload).forEach(key => {
-        if (Object.keys(activeFields).length > 0 && !activeFields[key]) {
-          delete insertPayload[key];
-        }
+          routingStepId: targetRoute.id,
+          startTime: new Date()
+        },
+        select: { id: true, employeeId: true, startTime: true }
       });
-
-      return await tx.laborTransaction.create({
-        data: insertPayload
-      });
+      await tx.workOrder.update({ where: { id: targetOrder.id }, data: { status: "in-progress", updatedAt: new Date() } });
+      await tx.jobRouting.update({ where: { id: targetRoute.id }, data: { status: jobStatus } });
+      return created;
     });
 
-    console.log(`✅ Cloud Labor Log Created: Employee ${cleanEmpId} clocked into Job ${cleanJobId} Sequence ${rawSeq}`);
-    return res.status(201).json({ message: "Operator clocked into sequence successfully!", logId: laborLog.id });
-
+    const payload = toSerializable({
+      message: "Operator clocked into sequence successfully!",
+      logId: laborLog.id,
+      workOrderId: targetOrder.id,
+      orderNumber: targetOrder.orderNumber,
+      employeeId: operatorId,
+      jobStatus,
+      sequence: targetRoute.sequenceNumber,
+      machine: targetRoute.workCenterCode
+    });
+    broadcastShopFloorEvent("job-status", payload);
+    return res.status(201).json(payload);
   } catch (error) {
-    console.error("❌ Exception handled inside active labor cloud transaction:", error.message);
-    // Safe hardcoded return on catch block so the terminal layout never crashes during manual inputs
-    return res.status(201).json({ message: "Operator clocked into sequence successfully! (Fallback mode active)", logId: 1 });
+    console.error("Exception handled inside active labor cloud transaction:", error.message);
+    return res.status(500).json({ error: "Failed to clock operator into work order", requestId: req.requestId });
   }
 });
 
-// 2. POST /api/shopfloor/clock-out
-// Closes out open labor punches, logs part yield values, and triggers the WIP absorption engine
-router.post("/clock-out", async (req, res) => {
-  const { employeeId, workOrderId, partsProduced, logId, finalStatus } = req.body;
-  
-  const cleanEmpId = String(employeeId || "").trim();
-  const cleanJobId = String(workOrderId || "").trim();
+router.post("/actions", validateBody(shopFloorActionSchema), async (req, res) => {
+  const { actionType, employeeId, workOrderId, routerOperationId, machine, status, qualityCheckpoint } = req.body;
+
+  try {
+    const order = await findWorkOrder(workOrderId, { id: true, orderNumber: true, partNumber: true, status: true });
+    if (!order) return res.status(404).json({ error: "Work order not found", requestId: req.requestId });
+
+    const checkpoint = recordQualityCheckpoint(order.id, qualityCheckpoint, qualityCheckpoint.failedCount > 0 ? "failed" : "passed");
+    const nextStatus = status || (actionType === "QUALITY_CHECK" ? order.status : actionType.toLowerCase().replace("_", "-"));
+    const updatedOrder = await prisma.workOrder.update({
+      where: { id: order.id },
+      data: { status: nextStatus, updatedAt: new Date() },
+      select: { id: true, orderNumber: true, partNumber: true, status: true, updatedAt: true }
+    });
+
+    const payload = toSerializable({ actionType, employeeId, machine, routerOperationId, workOrder: updatedOrder, qualityCheckpoint: checkpoint });
+    broadcastShopFloorEvent("job-status", payload);
+    broadcastShopFloorEvent("quality-checkpoint", payload);
+    return res.status(202).json(payload);
+  } catch (error) {
+    console.error("Exception handled inside dynamic shop floor action:", error.message);
+    return res.status(500).json({ error: "Failed to process shop floor action", requestId: req.requestId });
+  }
+});
+
+router.post("/clock-out", validateBody(clockOutSchema), async (req, res) => {
+  const { employeeId, workOrderId, partsProduced, logId, finalStatus, qualityCheckpoint } = req.body;
   const targetLogId = logId ? Number(logId) : null;
 
-  if (!targetLogId && !cleanEmpId && !cleanJobId) {
-    return res.status(400).json({ error: "GSS Error: Missing unique punch identifier payloads." });
-  }
-
   try {
-    // A. Find the active running transaction punch card row inside Neon
-    const activePunch = targetLogId 
-      ? await prisma.laborTransaction.findUnique({ where: { id: targetLogId } })
+    const targetOrder = !targetLogId && workOrderId ? await findWorkOrder(workOrderId, { id: true }) : null;
+    const activePunch = targetLogId
+      ? await prisma.laborTransaction.findUnique({ where: { id: targetLogId }, select: { id: true, workOrderId: true, routingStepId: true, employeeId: true, startTime: true } })
       : await prisma.laborTransaction.findFirst({
           where: {
-            ...(cleanEmpId ? { employeeId: cleanEmpId } : {}),
+            ...(employeeId ? { employeeId } : {}),
+            ...(targetOrder ? { workOrderId: targetOrder.id } : {}),
             endTime: null
-          }
+          },
+          select: { id: true, workOrderId: true, routingStepId: true, employeeId: true, startTime: true },
+          orderBy: { startTime: "desc" }
         });
 
-    if (!activePunch) {
-      return res.status(200).json({ message: "Operator clocked out successfully! (Punch closed)" });
-    }
+    if (!activePunch) return res.status(404).json({ error: "Active labor punch not found", requestId: req.requestId });
 
-    // B. Close the punch record atomically by appending the end timestamp
+    const now = new Date();
+    const elapsedHours = Math.max((now.getTime() - new Date(activePunch.startTime).getTime()) / 3600000, 0);
     const closedPunch = await prisma.$transaction(async (tx) => {
-      const updateData = {
-        endTime: new Date(),
-        status: String(finalStatus || "COMPLETED").toUpperCase()
-      };
-
-      // Append production yield parameters if tracked inside your model schema
-      if ("quantityCompleted" in tx.laborTransaction.fields) {
-        updateData.quantityCompleted = parseInt(partsProduced, 10) || 0;
-      }
-
-      return await tx.laborTransaction.update({
+      const updated = await tx.laborTransaction.update({
         where: { id: activePunch.id },
-        data: updateData
+        data: { endTime: now, runHours: finalStatus === "COMPLETED" ? elapsedHours : 0, piecesProduced: partsProduced },
+        select: { id: true, employeeId: true, workOrderId: true, routingStepId: true, endTime: true, piecesProduced: true }
       });
+
+      await tx.workOrder.update({
+        where: { id: activePunch.workOrderId },
+        data: { status: finalStatus.toLowerCase(), quantityCompleted: { increment: partsProduced }, updatedAt: now }
+      });
+      await tx.jobRouting.update({ where: { id: activePunch.routingStepId }, data: { status: finalStatus } });
+      return updated;
     });
 
-    console.log(`🛑 Cloud Punch Closed: Log ${closedPunch.id} clocked out of active job sequence.`);
-
-    // C. TRIGGER THE GSS COST ABSORPTION METHOD LIVE (Calculates Burden Costs to Ledger)
+    const checkpoint = recordQualityCheckpoint(activePunch.workOrderId, qualityCheckpoint, qualityCheckpoint.failedCount > 0 ? "failed" : "passed");
     await absorbManufacturingCosts(closedPunch.id);
 
-    return res.status(200).json({ message: "Operator clocked out and manufacturing costs absorbed successfully!" });
-
+    const payload = toSerializable({ message: "Operator clocked out and manufacturing costs absorbed successfully!", laborTransaction: closedPunch, qualityCheckpoint: checkpoint });
+    broadcastShopFloorEvent("job-status", payload);
+    broadcastShopFloorEvent("quality-checkpoint", payload);
+    return res.status(200).json(payload);
   } catch (error) {
-    console.error("❌ Exception handled inside cloud clock out transaction:", error.message);
-    return res.status(200).json({ message: "Operator clocked out successfully! (Fallback mode active)" });
+    console.error("Exception handled inside cloud clock out transaction:", error.message);
+    return res.status(500).json({ error: "Failed to clock operator out of work order", requestId: req.requestId });
   }
 });
 
-// 3. GET /api/shopfloor/variance-analytics
-// Maps your Neon data straight onto your dashboard spreadsheet analytics row cards
-router.get("/variance-analytics", async (req, res) => {
+router.get("/variance-analytics", validateQuery(paginationQuerySchema), async (req, res) => {
+  const filters = req.query;
+  const sortBy = sortColumns.has(filters.sortBy) ? filters.sortBy : "updatedAt";
+  const skip = (filters.page - 1) * filters.limit;
+  const orderBy = sortBy === "efficiency" ? { updatedAt: filters.sortDir } : { [sortBy]: filters.sortDir };
+
   try {
-    const activeWorkOrders = await prisma.workOrder.findMany({
-      include: {
-        routings: true,
-        jobRoutings: true,
-        laborTransactions: true
-      }
-    }).catch(() => []);
+    const where = buildWorkOrderWhere(filters);
+    const [activeWorkOrders, total] = await Promise.all([
+      prisma.workOrder.findMany({
+        where,
+        skip,
+        take: filters.limit,
+        orderBy,
+        select: {
+          id: true,
+          orderNumber: true,
+          partNumber: true,
+          quantity: true,
+          quantityOrdered: true,
+          quantityCompleted: true,
+          status: true,
+          dueDate: true,
+          updatedAt: true,
+          routingSteps: { select: { workCenterCode: true, sequenceNumber: true, estimatedHours: true, actualHours: true, status: true } },
+          laborTransactions: { select: { employeeId: true, startTime: true, endTime: true, piecesProduced: true, piecesScrapped: true }, take: 8, orderBy: { startTime: "desc" } }
+        }
+      }),
+      prisma.workOrder.count({ where })
+    ]);
 
-    const varianceData = activeWorkOrders.map((order) => {
-      const orderQty = Number(order.quantity || order.quantityOrdered || 50);
-      const routingsList = order.jobRoutings || order.routings || [];
-
-      const totalEstimatedHours = routingsList.reduce((sum, step) => {
-        const estRun = Number(step.estRunHoursPerPiece || step.estimatedHours || 0) * (step.estRunHoursPerPiece ? orderQty : 1);
-        return sum + Number(step.estSetupHours || 0) + estRun;
-      }, 0);
-
-      const totalActualHours = routingsList.reduce((sum, step) => {
-        return sum + Number(step.actualHours || 0);
-      }, 0);
-
-      const efficiency = totalActualHours > 0 
-        ? Math.round((totalEstimatedHours / totalActualHours) * 100) 
-        : 100;
-
-      return {
-        jobId: order.orderNumber || order.woNumber || "WO-1001",
-        partNumber: order.partNumber || "PRT-990-STEEL",
-        qtyOrdered: orderQty,
-        qtyCompleted: order.quantityCompleted || 0,
-        efficiency: efficiency > 200 ? 100 : efficiency, // Clamp realistic bound ratios
-        estimatedHours: totalEstimatedHours > 0 ? totalEstimatedHours.toFixed(2) : "14.00",
-        actualHours: totalActualHours.toFixed(2)
-      };
+    const varianceData = activeWorkOrders.map(mapVarianceOrder).sort((left, right) => {
+      if (sortBy !== "efficiency") return 0;
+      return filters.sortDir === "asc" ? left.efficiency - right.efficiency : right.efficiency - left.efficiency;
     });
 
-    if (varianceData.length === 0) {
-      return res.json([{
-        jobId: "WO-1001",
-        partNumber: "PRT-990-STEEL",
-        qtyOrdered: 50,
-        qtyCompleted: 12,
-        efficiency: 100,
-        estimatedHours: "14.00",
-        actualHours: "0.00"
-      }]);
-    }
-
-    return res.json(varianceData);
-
+    return res.json({
+      data: varianceData,
+      pagination: { page: filters.page, limit: filters.limit, total, hasMore: skip + varianceData.length < total },
+      filters: { status: filters.status || null, machine: filters.machine || null, operatorId: filters.operatorId || null, operatorStatus: filters.operatorStatus, search: filters.search || null }
+    });
   } catch (error) {
-    console.error("❌ Prisma analytics engine data stream failure:", error.message);
-    return res.status(500).json({ error: "Failed to compile live analytics data layers." });
+    console.error("Prisma analytics engine data stream failure:", error.message);
+    return res.status(500).json({ error: "Failed to compile live analytics data layers.", requestId: req.requestId });
   }
 });
 

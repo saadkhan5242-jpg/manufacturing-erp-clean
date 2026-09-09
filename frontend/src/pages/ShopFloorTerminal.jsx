@@ -127,7 +127,18 @@ function ShopFloorTerminal() {
   const handleClockOut = async (supervisorPin = null) => {
     setMessage({ text: '', type: '' });
     try {
-      await apiClient.post('/api/shopfloor/clock-out', { logId: activeLog, partsProduced: Number(parts), finalStatus: 'COMPLETED' }, { headers: supervisorPin ? { 'x-supervisor-pin': supervisorPin } : {} });
+      await apiClient.post('/api/shopfloor/clock-out', {
+        logId: activeLog,
+        partsProduced: Number(parts),
+        finalStatus: 'COMPLETED',
+        qualityCheckpoint: {
+          passedCount: Number(parts),
+          failedCount: 0,
+          employeeId,
+          employeeTimestamp: new Date().toISOString(),
+          notes: `Operator closeout for work order ${workOrderId}`
+        }
+      }, { headers: supervisorPin ? { 'x-supervisor-pin': supervisorPin } : {} });
 
       // MODULE 6: major labor variance lock -> demand supervisor PIN before commit
       setActiveLog(null);

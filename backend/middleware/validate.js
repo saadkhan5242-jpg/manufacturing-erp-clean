@@ -10,7 +10,7 @@ export function validateBody(schema) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const issues = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`);
+        const issues = error.issues.map((err) => `${err.path.join(".")}: ${err.message}`);
         return res.status(400).json({
           error: "Validation Error",
           details: issues,
@@ -29,7 +29,7 @@ export function validateQuery(schema) {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const issues = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`);
+        const issues = error.issues.map((err) => `${err.path.join(".")}: ${err.message}`);
         return res.status(400).json({
           error: "Query Validation Error",
           details: issues,

@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const devApiUrl = process.env.VITE_DEV_API_URL || process.env.VITE_API_BASE_URL || "http://localhost:4000";
+
 export default defineConfig({
   plugins: [react()],
   base: "./", // Forces relative pathways for asset references
@@ -20,7 +22,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:4000",
+        target: devApiUrl,
         changeOrigin: true,
         secure: false,
       }
