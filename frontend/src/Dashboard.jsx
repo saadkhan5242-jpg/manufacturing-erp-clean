@@ -1,303 +1,453 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  Activity,
-  BarChart3,
-  Boxes,
+  AlertTriangle,
   ClipboardCheck,
-  Clock3,
   Factory,
-  FileStack,
+  FileCheck2,
+  FileText,
   Gauge,
-  Layers3,
+  Loader2,
+  LockKeyhole,
   LogOut,
-  PanelRight,
-  Search,
+  Radar,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
-  TimerReset,
-  Wrench
+  Truck,
+  Workflow
 } from "lucide-react";
 import apiClient from "./lib/apiClient.js";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
 import { useAuth } from "./hooks/useAuth.jsx";
 import ShopFloorKiosk from "./components/ShopFloorKiosk.jsx";
 
-const WORKSPACE_MODULES = [
-  { id: "floor", label: "Shop Floor", icon: Factory, roles: ["admin", "operator", "employee"] },
-  { id: "production", label: "Production", icon: Layers3, roles: ["admin", "operator"] },
-  { id: "quality", label: "Quality", icon: ClipboardCheck, roles: ["admin", "operator", "employee"] },
-  { id: "materials", label: "Materials", icon: Boxes, roles: ["admin", "operator"] },
-  { id: "maintenance", label: "Maintenance", icon: Wrench, roles: ["admin", "operator"] },
-  { id: "insights", label: "Insights", icon: BarChart3, roles: ["admin", "operator"] }
+const AEROSPACE_TABS = [
+  { id: "quoting", label: "Quoting", icon: FileText, endpointKeys: ["quoteProposals", "mrp"] },
+  { id: "bom", label: "BOM Multi-level Routers", icon: Workflow, endpointKeys: ["workOrders", "parts"] },
+  { id: "kiosk", label: "Shop Floor Kiosk", icon: Factory, endpointKeys: ["workOrders", "calibration"] },
+  { id: "quality", label: "AS9102 QMS Quality", icon: ShieldCheck, endpointKeys: ["calibration", "workOrders"] },
+  { id: "shipping", label: "Shipping/Receiving", icon: Truck, endpointKeys: ["shipping", "parts", "mrpQueue"] }
 ];
 
-const WORKSPACE_CARDS = [
-  { id: "dispatch", module: "production", title: "Dispatch Board", icon: Clock3, description: "Prioritize jobs by active variance, due pressure, and work center load." },
-  { id: "traveler", module: "production", title: "Digital Travelers", icon: FileStack, description: "Surface routings, materials, blueprints, and operator notes in one workspace." },
-  { id: "inspection", module: "quality", title: "Inspection Queue", icon: ShieldCheck, description: "Capture in-process checks and supervisor reviews from the floor." },
-  { id: "material", module: "materials", title: "Material Readiness", icon: Boxes, description: "Track shortages, lot traceability, and upcoming kitting needs." },
-  { id: "maintenance", module: "maintenance", title: "Asset Health", icon: Wrench, description: "Coordinate downtime, preventive work, and blocked machines." },
-  { id: "analytics", module: "insights", title: "Live Absorption", icon: Gauge, description: "Watch standard-to-actual performance as labor posts from kiosks." }
-];
+const DATA_FEEDS = {
+  mrp: { label: "MRP Forecast", endpoint: "/api/mrp/forecast", extract: (payload) => payload?.requirements || [] },
+  mrpQueue: { label: "Draft PO Queue", endpoint: "/api/mrp/purchase-queue", extract: (payload) => payload?.vendors || [] },
+  calibration: { label: "Calibration Instruments", endpoint: "/api/quality/calibration/instruments", extract: (payload) => Array.isArray(payload) ? payload : [] },
+  parts: { label: "Parts Traceability", endpoint: "/api/parts", extract: (payload) => Array.isArray(payload) ? payload : [] },
+  workOrders: { label: "Work Orders", endpoint: "/api/work-orders", extract: (payload) => Array.isArray(payload) ? payload : payload?.data || [] },
+  shipping: { label: "Daily Shipments", endpoint: "/api/dashboard/daily-shipments", extract: (payload) => payload?.shipments || [] },
+  quoteProposals: { label: "AI Quote Proposals", endpoint: "/api/ai-intake/quote-proposals", extract: (payload) => payload?.proposals || [] }
+};
 
-function normalizeVarianceRows(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.variance_data)) return payload.variance_data;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
+const HEALTH_STYLES = {
+  green: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  yellow: "border-amber-300/30 bg-amber-300/10 text-amber-100",
+  red: "border-rose-400/30 bg-rose-400/10 text-rose-100",
+  blue: "border-sky-400/30 bg-sky-400/10 text-sky-100"
+};
+
+function emptyFeedState() {
+  return Object.fromEntries(Object.keys(DATA_FEEDS).map((key) => [key, { data: [], status: "idle", error: "" }]));
 }
 
-function buildTimeline(rows) {
-  return rows.slice(0, 6).map((row, index) => {
-    const standardHours = Number(row.standardHours ?? row.estimatedHours ?? 0);
-    const actualHours = Number(row.actualHours ?? 0);
-    const efficiency = actualHours > 0 ? Math.round((standardHours / actualHours) * 100) : 0;
-    return {
-      id: row.id ?? `${row.workCenter ?? row.jobId ?? "row"}-${index}`,
-      title: row.workCenter || row.jobId || "Unassigned work center",
-      detail: row.partNumber || row.operation || "No part linked",
-      metric: actualHours > 0 ? `${efficiency}% efficiency` : "Awaiting labor",
-      tone: efficiency >= 90 ? "emerald" : efficiency >= 75 ? "amber" : "rose"
-    };
-  });
+function countItar(items) {
+  return items.filter((item) => item?.is_itar_controlled || item?.isItarControlled).length;
 }
 
-function MetricCard({ metric }) {
-  const Icon = metric.icon;
+function statusTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (/(hold|late|risk|critical|fail|blocked|shortage)/.test(normalized)) return "red";
+  if (/(pending|draft|review|open|expedite)/.test(normalized)) return "yellow";
+  if (/(complete|covered|approved|shipped|pass)/.test(normalized)) return "green";
+  return "blue";
+}
+
+function valueOrDash(value) {
+  return value === undefined || value === null || value === "" ? "--" : value;
+}
+
+function DataStatusPill({ feed }) {
+  if (feed.status === "loading") return <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-xs font-bold text-sky-100"><Loader2 className="h-3 w-3 animate-spin" /> Syncing</span>;
+  if (feed.status === "error") return <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/30 bg-rose-400/10 px-2.5 py-1 text-xs font-bold text-rose-100"><AlertTriangle className="h-3 w-3" /> API down</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-xs font-bold text-emerald-100"><Radar className="h-3 w-3" /> Live</span>;
+}
+
+function MetricTile({ icon: Icon, label, value, caption, tone = "blue" }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <article className={`rounded-lg border p-4 ${HEALTH_STYLES[tone]}`}>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</span>
-        <Icon className="h-4 w-4 text-teal-700" aria-hidden="true" />
+        <span className="text-xs font-black uppercase tracking-wide opacity-80">{label}</span>
+        <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
-      <strong className="mt-3 block text-2xl font-black text-slate-950">{metric.value}</strong>
-      <span className="mt-1 block text-xs text-slate-500">{metric.caption}</span>
+      <strong className="mt-3 block text-3xl font-black text-white">{value}</strong>
+      <p className="mt-1 text-xs opacity-75">{caption}</p>
     </article>
   );
 }
 
-function WorkspaceCard({ card, rows }) {
-  const Icon = card.icon;
-  const relatedCount = rows.length;
+function FeedCard({ title, feedKey, feed, children }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
-      <div className="flex items-start justify-between gap-4">
-        <div className="rounded-md bg-teal-50 p-3 text-teal-800">
-          <Icon className="h-5 w-5" aria-hidden="true" />
+    <section className="rounded-lg border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 backdrop-blur">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200/80">{DATA_FEEDS[feedKey]?.label || feedKey}</p>
+          <h2 className="mt-1 text-xl font-black text-white">{title}</h2>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{relatedCount} live</span>
+        <DataStatusPill feed={feed} />
       </div>
-      <h3 className="mt-5 text-lg font-black text-slate-950">{card.title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{card.description}</p>
-    </article>
+      {feed.error && <p className="mt-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-100">{feed.error}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
   );
 }
 
-function TimelineItem({ item }) {
-  const tones = {
-    emerald: "bg-emerald-500 text-emerald-700 border-emerald-200",
-    amber: "bg-amber-500 text-amber-700 border-amber-200",
-    rose: "bg-rose-500 text-rose-700 border-rose-200"
-  };
+function TraceList({ items, renderItem, emptyText }) {
+  if (!items.length) return <div className="rounded-lg border border-dashed border-white/15 bg-black/20 p-8 text-center text-sm font-bold text-slate-400">{emptyText}</div>;
+  return <div className="grid gap-3">{items.map(renderItem)}</div>;
+}
+
+function QuotingWorkspace({ feeds }) {
+  const proposals = feeds.quoteProposals.data;
+  const shortages = feeds.mrp.data.filter((item) => item.status === "shortage").slice(0, 4);
   return (
-    <li className="flex gap-3">
-      <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${tones[item.tone]?.split(" ")[0] || "bg-slate-400"}`} />
-      <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-bold text-slate-950">{item.title}</h3>
-          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tones[item.tone]?.replace(/^\S+\s/, "") || "text-slate-600 border-slate-200"}`}>{item.metric}</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-500">{item.detail}</p>
-      </div>
-    </li>
+    <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <FeedCard title="AI RFQ Draft Proposals" feedKey="quoteProposals" feed={feeds.quoteProposals}>
+        <TraceList
+          items={proposals}
+          emptyText="No AI quote proposals are waiting for QA approval."
+          renderItem={(proposal) => (
+            <article key={proposal.id} className="rounded-lg border border-white/10 bg-slate-950/70 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{proposal.partNumber} Rev {valueOrDash(proposal.revisionNumber)}</h3>
+                  <p className="mt-1 text-sm text-slate-400">Proposal {proposal.proposalNumber} / {proposal.materialGrade || "material pending"}</p>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${HEALTH_STYLES[statusTone(proposal.validationStatus)]}`}>{proposal.validationStatus}</span>
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+
+      <FeedCard title="Material Risk Before Quote Release" feedKey="mrp" feed={feeds.mrp}>
+        <TraceList
+          items={shortages}
+          emptyText="No material shortages surfaced by the latest MRP forecast."
+          renderItem={(item) => (
+            <article key={item.partNumber} className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-amber-50">
+              <div className="flex items-center justify-between gap-3">
+                <strong>{item.partNumber}</strong>
+                <span className="text-xs font-black uppercase">{item.priority}</span>
+              </div>
+              <p className="mt-1 text-sm text-amber-100/75">Need {item.netRequirement} / Available {item.availableStock} / Vendor {valueOrDash(item.preferredVendorId)}</p>
+            </article>
+          )}
+        />
+      </FeedCard>
+    </div>
   );
+}
+
+function BomRouterWorkspace({ feeds }) {
+  const parts = feeds.parts.data.slice(0, 8);
+  const workOrders = feeds.workOrders.data.slice(0, 5);
+  return (
+    <div className="grid gap-5 2xl:grid-cols-[0.9fr_1.1fr]">
+      <FeedCard title="ITAR-Aware Part Master" feedKey="parts" feed={feeds.parts}>
+        <TraceList
+          items={parts}
+          emptyText="No parts returned from /api/parts."
+          renderItem={(part) => (
+            <article key={part.id} className="rounded-lg border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{part.part_number || part.sku}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{part.description || "Traceability description pending"}</p>
+                </div>
+                {part.is_itar_controlled && <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs font-black text-rose-100">ITAR</span>}
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+
+      <FeedCard title="Dynamic Work Order Routers" feedKey="workOrders" feed={feeds.workOrders}>
+        <TraceList
+          items={workOrders}
+          emptyText="No active work orders returned from /api/work-orders."
+          renderItem={(order) => (
+            <article key={order.id} className="rounded-lg border border-white/10 bg-slate-950/80 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{order.orderNumber || `WO-${order.id}`}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{order.partNumber} / Qty {valueOrDash(order.quantity)}</p>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${HEALTH_STYLES[statusTone(order.status)]}`}>{order.status}</span>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {["Milling", "Deburr", "Inspection"].map((step, index) => <div key={step} className="rounded-md border border-cyan-300/15 bg-cyan-300/5 p-3 text-sm font-bold text-cyan-100">{(index + 1) * 10}. {step}</div>)}
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+    </div>
+  );
+}
+
+function QualityWorkspace({ feeds }) {
+  const instruments = feeds.calibration.data;
+  const workOrdersOnHold = feeds.workOrders.data.filter((order) => /hold|qc/i.test(String(order.status))).slice(0, 5);
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <FeedCard title="AS9102 / In-Process Quality Queue" feedKey="workOrders" feed={feeds.workOrders}>
+        <TraceList
+          items={workOrdersOnHold}
+          emptyText="No work orders are currently flagged for quality hold."
+          renderItem={(order) => (
+            <article key={order.id} className="rounded-lg border border-rose-400/25 bg-rose-500/10 p-4 text-rose-50">
+              <h3 className="font-black">{order.orderNumber || `WO-${order.id}`}</h3>
+              <p className="mt-1 text-sm text-rose-100/75">{order.partNumber} / {order.status}</p>
+            </article>
+          )}
+        />
+      </FeedCard>
+
+      <FeedCard title="Calibration-Controlled Instruments" feedKey="calibration" feed={feeds.calibration}>
+        <TraceList
+          items={instruments.slice(0, 6)}
+          emptyText="No measurement instruments returned from /api/quality/calibration/instruments."
+          renderItem={(instrument) => (
+            <article key={instrument.id} className="rounded-lg border border-white/10 bg-black/25 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{instrument.instrumentNumber}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{instrument.instrumentType} / Due {valueOrDash(instrument.calibrationDueAt)}</p>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${HEALTH_STYLES[statusTone(instrument.status)]}`}>{instrument.status}</span>
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+    </div>
+  );
+}
+
+function ShippingWorkspace({ feeds }) {
+  const shipments = feeds.shipping.data.slice(0, 6);
+  const queue = feeds.mrpQueue.data.slice(0, 4);
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <FeedCard title="Shipping / Receiving Trace" feedKey="shipping" feed={feeds.shipping}>
+        <TraceList
+          items={shipments}
+          emptyText="No shipment activity returned from /api/dashboard/daily-shipments."
+          renderItem={(shipment) => (
+            <article key={shipment.id || `${shipment.jobId}-${shipment.partNumber}`} className="rounded-lg border border-white/10 bg-slate-950/80 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{shipment.jobId || shipment.orderNumber || "Shipment"}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{shipment.partNumber || shipment.carrier || "Receiving trace pending"}</p>
+                </div>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${HEALTH_STYLES[statusTone(shipment.status)]}`}>{shipment.status || "scheduled"}</span>
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+
+      <FeedCard title="Vendor-Grouped Draft PO Queue" feedKey="mrpQueue" feed={feeds.mrpQueue}>
+        <TraceList
+          items={queue}
+          emptyText="No draft purchase queue returned from /api/mrp/purchase-queue."
+          renderItem={(vendor, index) => (
+            <article key={vendor.preferredVendorId || index} className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-amber-50">
+              <h3 className="font-black">{vendor.supplierName || "Unassigned vendor"}</h3>
+              <p className="mt-1 text-sm text-amber-100/75">{(vendor.lines || []).length} line(s) / Est ${Number(vendor.estimatedTotalCost || 0).toFixed(2)}</p>
+            </article>
+          )}
+        />
+      </FeedCard>
+    </div>
+  );
+}
+
+function KioskWorkspace({ feeds }) {
+  return (
+    <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.3fr)_0.7fr]">
+      <ShopFloorKiosk />
+      <FeedCard title="Live Work Order Context" feedKey="workOrders" feed={feeds.workOrders}>
+        <TraceList
+          items={feeds.workOrders.data.slice(0, 6)}
+          emptyText="No work orders available for kiosk context."
+          renderItem={(order) => (
+            <article key={order.id} className="rounded-lg border border-white/10 bg-black/25 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-white">{order.orderNumber || `WO-${order.id}`}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{order.partNumber} / {order.status}</p>
+                </div>
+                {order.is_itar_controlled && <LockKeyhole className="h-5 w-5 text-rose-300" aria-hidden="true" />}
+              </div>
+            </article>
+          )}
+        />
+      </FeedCard>
+    </div>
+  );
+}
+
+function ActiveWorkspace({ activeTab, feeds }) {
+  if (activeTab === "quoting") return <QuotingWorkspace feeds={feeds} />;
+  if (activeTab === "bom") return <BomRouterWorkspace feeds={feeds} />;
+  if (activeTab === "kiosk") return <KioskWorkspace feeds={feeds} />;
+  if (activeTab === "quality") return <QualityWorkspace feeds={feeds} />;
+  return <ShippingWorkspace feeds={feeds} />;
 }
 
 export default function Dashboard() {
-  const { user, isAdmin, logout } = useAuth();
-  const [activeModule, setActiveModule] = useState("floor");
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [varianceData, setVarianceData] = useState([]);
-  const [varianceLoading, setVarianceLoading] = useState(true);
-  const [workspaceQuery, setWorkspaceQuery] = useState("");
+  const { user, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState("quoting");
+  const [feeds, setFeeds] = useState(emptyFeedState);
+  const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [refreshToken, setRefreshToken] = useState(0);
 
-  // Autonomous cloud refresh polling — sync variance metrics every 10s
   useEffect(() => {
     let cancelled = false;
-    const load = () => {
-      apiClient.get("/api/shopfloor/variance-analytics")
-        .then((data) => {
-          if (cancelled) return;
-          setVarianceData(normalizeVarianceRows(data));
-          setVarianceLoading(false);
-        })
-        .catch(() => {
-          if (!cancelled) setVarianceLoading(false);
-        });
+    const loadFeeds = async () => {
+      setFeeds((current) => Object.fromEntries(Object.entries(current).map(([key, value]) => [key, { ...value, status: "loading", error: "" }])));
+      const entries = await Promise.allSettled(Object.entries(DATA_FEEDS).map(async ([key, feed]) => {
+        const payload = await apiClient.get(feed.endpoint);
+        return [key, { data: feed.extract(payload), status: "ready", error: "" }];
+      }));
+      if (cancelled) return;
+      const nextFeeds = emptyFeedState();
+      for (const entry of entries) {
+        if (entry.status === "fulfilled") {
+          const [key, value] = entry.value;
+          nextFeeds[key] = value;
+        } else {
+          const key = Object.keys(DATA_FEEDS)[entries.indexOf(entry)];
+          nextFeeds[key] = { data: [], status: "error", error: entry.reason?.message || "Unable to load feed" };
+        }
+      }
+      setFeeds(nextFeeds);
+      setLastSyncedAt(new Date().toLocaleTimeString());
     };
-    load();
-    const timer = setInterval(load, 10000);
+
+    loadFeeds();
+    const timer = window.setInterval(loadFeeds, 30000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshToken]);
 
-  const role = user?.role || "operator";
-  const visibleModules = WORKSPACE_MODULES.filter((module) => !module.roles || module.roles.includes(role));
-  const filteredCards = WORKSPACE_CARDS.filter((card) => {
-    const matchesModule = activeModule === "floor" || card.module === activeModule;
-    const searchable = `${card.title} ${card.description}`.toLowerCase();
-    return matchesModule && searchable.includes(workspaceQuery.trim().toLowerCase());
-  });
-  const totalStdHours = varianceData.reduce((sum, r) => sum + Number(r.standardHours ?? r.estimatedHours ?? 0), 0);
-  const totalActHours = varianceData.reduce((sum, r) => sum + Number(r.actualHours ?? 0), 0);
-  const avgEfficiency = totalActHours > 0 ? Math.round((totalStdHours / totalActHours) * 100) : 0;
-  const timelineItems = buildTimeline(varianceData);
+  const workOrders = feeds.workOrders.data;
+  const parts = feeds.parts.data;
+  const mrpRequirements = feeds.mrp.data;
+  const quoteProposals = feeds.quoteProposals.data;
+  const activeShortages = mrpRequirements.filter((item) => item.status === "shortage").length;
+  const itarAssets = countItar(parts) + countItar(workOrders);
+  const qmsHolds = workOrders.filter((order) => /hold|qc/i.test(String(order.status))).length;
+  const proposalCount = quoteProposals.filter((proposal) => proposal.requiresQaApproval !== false).length;
 
   const metrics = [
-    { label: "Live Jobs", value: varianceData.length, caption: varianceLoading ? "Syncing shop feed" : "Variance rows online", icon: Activity },
-    { label: "Standard Hours", value: totalStdHours.toFixed(2), caption: "Planned routing time", icon: TimerReset },
-    { label: "Actual Hours", value: totalActHours.toFixed(2), caption: "Posted labor time", icon: Clock3 },
-    { label: "Efficiency", value: `${avgEfficiency}%`, caption: "Std vs actual", icon: Gauge }
+    { label: "Draft Quotes", value: proposalCount, caption: "QA approval required", icon: Sparkles, tone: proposalCount > 0 ? "yellow" : "green" },
+    { label: "ITAR Assets", value: itarAssets, caption: "Controlled records visible", icon: LockKeyhole, tone: itarAssets > 0 ? "red" : "blue" },
+    { label: "QMS Holds", value: qmsHolds, caption: "Routing or job holds", icon: ClipboardCheck, tone: qmsHolds > 0 ? "red" : "green" },
+    { label: "MRP Shortages", value: activeShortages, caption: "Material risks", icon: Gauge, tone: activeShortages > 0 ? "yellow" : "green" }
   ];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d7f4ec,transparent_34%),linear-gradient(135deg,#f8fafc_0%,#eef2f1_48%,#f6efe6_100%)] text-slate-950">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <aside className="border-b border-slate-200 bg-white/80 p-5 backdrop-blur lg:border-b-0 lg:border-r">
+    <div className="min-h-screen bg-[#05070d] text-slate-100">
+      <div className="absolute inset-0 -z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.18),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(16,185,129,0.12),transparent_28%),linear-gradient(135deg,#05070d_0%,#0d1321_52%,#111827_100%)]" />
+      <div className="relative z-10 grid min-h-screen grid-cols-1 xl:grid-cols-[290px_minmax(0,1fr)]">
+        <aside className="border-b border-white/10 bg-white/[0.03] p-5 backdrop-blur-xl xl:border-b-0 xl:border-r">
           <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-lg bg-teal-800 font-black text-white">FL</span>
+            <span className="grid h-12 w-12 place-items-center rounded-lg border border-cyan-300/30 bg-cyan-300/10 font-black text-cyan-100">A9</span>
             <div>
-              <p className="text-sm font-black uppercase tracking-wide text-slate-900">ForgeLogic</p>
-              <p className="text-xs text-slate-500">Paperless factory OS</p>
+              <p className="text-sm font-black uppercase tracking-[0.22em] text-white">Aerospace ERP</p>
+              <p className="text-xs font-semibold text-slate-400">AS9100 / ITAR command layer</p>
             </div>
           </div>
 
-          <nav className="mt-8 grid gap-2" aria-label="Workspace modules">
-            {visibleModules.map((module) => {
-              const Icon = module.icon;
-              const active = activeModule === module.id;
+          <nav className="mt-8 grid gap-2" aria-label="Aerospace workspace tabs">
+            {AEROSPACE_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
               return (
-                <button
-                  key={module.id}
-                  type="button"
-                  onClick={() => setActiveModule(module.id)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-bold transition ${active ? "bg-teal-800 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}
-                >
+                <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`group flex items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm font-black transition ${active ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-50 shadow-lg shadow-cyan-950/30" : "border-white/5 bg-white/[0.03] text-slate-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white"}`}>
                   <Icon className="h-5 w-5" aria-hidden="true" />
-                  <span>{module.label}</span>
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
           </nav>
 
-          <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signed in</p>
-            <p className="mt-2 font-bold text-slate-950">{user?.name || user?.email || "Operator"}</p>
-            <p className="text-sm capitalize text-slate-500">{role}</p>
-            <div className="mt-4 flex gap-2">
-              {isAdmin() && (
-                <button type="button" onClick={() => setShowAdmin((visible) => !visible)} className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:border-teal-500 hover:text-teal-800">
-                  <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Admin
-                </button>
-              )}
-              <button type="button" onClick={logout} className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800">
-                <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
-              </button>
-            </div>
-          </div>
+          <section className="mt-8 rounded-lg border border-white/10 bg-black/25 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-500">Session</p>
+            <p className="mt-2 font-black text-white">{user?.name || user?.email || "Operator"}</p>
+            <p className="text-sm text-slate-400">{user?.role || "operator"}</p>
+            <button type="button" onClick={logout} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-black text-slate-950 hover:bg-cyan-100">
+              <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
+            </button>
+          </section>
         </aside>
 
-        <main className="min-w-0 p-4 sm:p-6 xl:p-8">
-          <header className="flex flex-col gap-5 rounded-lg border border-white/80 bg-white/70 p-5 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-teal-800">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Real-time workspace
-              </p>
-              <h1 className="mt-3 text-3xl font-black tracking-normal text-slate-950 sm:text-4xl">Modern paperless manufacturing command center</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Fluid cards, live timelines, and operator actions share the same state-driven workspace so production context can move with the job instead of hiding inside fixed forms.</p>
+        <main className="min-w-0 p-4 sm:p-6 2xl:p-8">
+          <header className="rounded-xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/30 backdrop-blur-xl">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-100"><FileCheck2 className="h-3.5 w-3.5" /> Paperless control tower</p>
+                <h1 className="mt-4 max-w-5xl text-3xl font-black tracking-normal text-white sm:text-5xl">Real-time aerospace manufacturing, traceability, quality, and compliance dashboard</h1>
+                <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-400">Dynamic feeds map directly to ERP endpoints for MRP, QMS, parts, work orders, shipping, and AI quote intake. Every card is driven by live arrays and designed for fast shop-floor triage.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs font-bold text-slate-300">Synced {lastSyncedAt || "pending"}</span>
+                <button type="button" onClick={() => setRefreshToken((value) => value + 1)} className="inline-flex items-center gap-2 rounded-md border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-sm font-black text-cyan-100 hover:bg-cyan-300/20">
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> Refresh feeds
+                </button>
+              </div>
             </div>
-            <label className="relative block min-w-0 md:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-              <input
-                value={workspaceQuery}
-                onChange={(event) => setWorkspaceQuery(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white py-3 pl-10 pr-3 text-sm outline-none ring-teal-700/20 transition focus:border-teal-600 focus:ring-4"
-                placeholder="Search workspace"
-              />
-            </label>
           </header>
 
-          {showAdmin && <div className="mt-6"><AdminDashboard /></div>}
-
-          <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Live metrics">
-            {metrics.map((metric) => <MetricCard key={metric.label} metric={metric} />)}
+          <section className="mt-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4" aria-label="Compliance metrics">
+            {metrics.map((metric) => <MetricTile key={metric.label} {...metric} />)}
           </section>
 
-          <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <div className="grid gap-6">
-              <ShopFloorKiosk />
-
-              <section className="rounded-lg border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-950">Dynamic Workspace</h2>
-                    <p className="mt-1 text-sm text-slate-500">Cards render from workspace state and respond to module filters.</p>
-                  </div>
-                  <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                    <PanelRight className="h-3.5 w-3.5" aria-hidden="true" /> {filteredCards.length} panels
-                  </span>
-                </div>
-                <div className="mt-5 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                  {filteredCards.map((card) => <WorkspaceCard key={card.id} card={card} rows={varianceData} />)}
-                  {filteredCards.length === 0 && (
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500 md:col-span-2 2xl:col-span-3">No workspace cards match the current filter.</div>
-                  )}
-                </div>
-              </section>
+          <section className="mt-5 rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {AEROSPACE_TABS.map((tab) => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-3 text-sm font-black transition ${active ? "bg-white text-slate-950" : "bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] hover:text-white"}`}>
+                    <Icon className="h-4 w-4" aria-hidden="true" /> {tab.label}
+                  </button>
+                );
+              })}
             </div>
+          </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white/80 p-5 shadow-sm backdrop-blur">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-950">Live Factory Timeline</h2>
-                  <p className="mt-1 text-sm text-slate-500">Generated from variance analytics polling.</p>
+          <section className="mt-5">
+            <ActiveWorkspace activeTab={activeTab} feeds={feeds} />
+          </section>
+
+          <section className="mt-5 grid gap-4 lg:grid-cols-3">
+            {Object.entries(DATA_FEEDS).map(([key, feed]) => (
+              <article key={key} className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">{feed.label}</p>
+                    <p className="mt-1 text-sm font-bold text-slate-300">{feed.endpoint}</p>
+                  </div>
+                  <DataStatusPill feed={feeds[key]} />
                 </div>
-                <Activity className="h-5 w-5 text-teal-700" aria-hidden="true" />
-              </div>
-              <ol className="mt-5 grid gap-3">
-                {timelineItems.map((item) => <TimelineItem key={item.id} item={item} />)}
-              </ol>
-              {!varianceLoading && timelineItems.length === 0 && (
-                <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">No live variance events are available yet.</div>
-              )}
-              {varianceLoading && <div className="mt-5 rounded-lg bg-slate-100 p-4 text-sm font-semibold text-slate-500">Syncing live operations...</div>}
-            </section>
+              </article>
+            ))}
           </section>
         </main>
-
-        <aside className="border-t border-slate-200 bg-slate-950 p-5 text-white lg:border-l lg:border-t-0">
-          <div className="sticky top-5 grid gap-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-teal-200">Live Metrics Panel</p>
-              <h2 className="mt-2 text-2xl font-black text-white">Plant pulse</h2>
-            </div>
-            {metrics.map((metric) => {
-              const Icon = metric.icon;
-              return (
-                <article key={metric.label} className="rounded-lg border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-slate-300">{metric.label}</span>
-                    <Icon className="h-4 w-4 text-teal-200" aria-hidden="true" />
-                  </div>
-                  <strong className="mt-2 block text-3xl font-black text-white">{metric.value}</strong>
-                  <p className="mt-1 text-xs text-slate-400">{metric.caption}</p>
-                </article>
-              );
-            })}
-          </div>
-        </aside>
       </div>
     </div>
   );
