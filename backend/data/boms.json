@@ -58,5 +58,35 @@
         "unit": "each"
       }
     ]
+  },
+  {
+    "id": 2,
+    "productId": 2,
+    "revision": "A",
+    "components": [
+      {
+        "partNumber": "AL-PLATE-10MM",
+        "quantity": 1,
+        "unit": "each"
+      },
+      {
+        "partNumber": "SEAL-KIT-05",
+        "quantity": 1,
+        "unit": "kit"
+      }
+    ],
+    "demoTag": "DEMO-ERP-2026"
+  },
+  {
+    "id": 3,
+    "productId": 3,
+    "revision": "A",
+    "components": [
+      {
+        "partNumber": "STEEL-BAR-32MM",
+        "quantity": 1,
+        "unit": "each"
+      }
+    ]
   }
 ]
