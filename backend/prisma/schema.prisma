@@ -49,6 +49,7 @@ model WorkOrder {
   quantityOrdered   Decimal   @default(0) @map("quantity_ordered") @db.Decimal(14, 4)
   quantityCompleted Decimal   @default(0) @map("quantity_completed") @db.Decimal(14, 4)
   status            String    @default("open")
+  isItarControlled  Boolean   @default(false) @map("is_itar_controlled")
   dueDate           DateTime? @map("due_date") @db.Date
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
@@ -146,4 +147,515 @@ model Shipment {
 
   @@index([targetShipDate])
   @@map("shipments")
+}
+
+model User {
+  id                                 BigInt   @id @default(autoincrement()) @db.BigInt
+  name                               String
+  email                              String   @unique
+  roleId                             BigInt?  @map("role_id") @db.BigInt
+  role                               String   @default("viewer")
+  passwordHash                       String?  @map("password_hash")
+  active                             Boolean  @default(true)
+  isUsCitizenOrPermanentResident     Boolean  @default(false) @map("is_us_citizen_or_permanent_resident")
+  createdAt                          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                          DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("users")
+}
+
+model Product {
+  id               BigInt   @id @default(autoincrement()) @db.BigInt
+  sku              String   @unique
+  name             String
+  description      String   @default("")
+  unitPrice        Decimal  @default(0) @map("unit_price") @db.Decimal(14, 2)
+  active           Boolean  @default(true)
+  isItarControlled Boolean  @default(false) @map("is_itar_controlled")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("products")
+}
+
+model Part {
+  id                          BigInt  @id @default(autoincrement()) @db.BigInt
+  partNumber                  String  @unique @map("part_number")
+  description                 String  @default("")
+  unit                        String  @default("each")
+  lotTracked                  Boolean @default(false) @map("lot_tracked")
+  serialTracked               Boolean @default(false) @map("serial_tracked")
+  active                      Boolean @default(true)
+  isItarControlled            Boolean @default(false) @map("is_itar_controlled")
+  exportControlClassification String  @default("") @map("export_control_classification")
+
+  @@map("parts")
+}
+
+model Rfq {
+  id               BigInt    @id @default(autoincrement()) @db.BigInt
+  rfqNumber        String    @unique @map("rfq_number")
+  customerId       String    @map("customer_id")
+  receivedAt       DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  dueAt            DateTime? @map("due_at") @db.Timestamptz(6)
+  status           String    @default("open")
+  isItarControlled Boolean   @default(false) @map("is_itar_controlled")
+  createdBy        BigInt?   @map("created_by") @db.BigInt
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("rfqs")
+}
+
+model RfqLineItem {
+  id               BigInt    @id @default(autoincrement()) @db.BigInt
+  rfqId            BigInt    @map("rfq_id") @db.BigInt
+  lineNumber       Int       @map("line_number")
+  partId           BigInt?   @map("part_id") @db.BigInt
+  productId        BigInt?   @map("product_id") @db.BigInt
+  partNumber       String    @map("part_number")
+  description      String    @default("")
+  quantity         Decimal   @db.Decimal(14, 4)
+  dueDate          DateTime? @map("due_date") @db.Date
+  isItarControlled Boolean   @default(false) @map("is_itar_controlled")
+
+  @@unique([rfqId, lineNumber])
+  @@map("rfq_line_items")
+}
+
+model QuoteEstimate {
+  id                           BigInt   @id @default(autoincrement()) @db.BigInt
+  rfqLineItemId                BigInt   @map("rfq_line_item_id") @db.BigInt
+  estimatorUserId              BigInt?  @map("estimator_user_id") @db.BigInt
+  workCenterId                 BigInt?  @map("work_center_id") @db.BigInt
+  estimatedSetupMinutes        Decimal  @default(0) @map("estimated_setup_minutes") @db.Decimal(12, 2)
+  estimatedRunMinutesPerPiece  Decimal  @default(0) @map("estimated_run_minutes_per_piece") @db.Decimal(12, 4)
+  machineRate                  Decimal  @default(0) @map("machine_rate") @db.Decimal(12, 2)
+  laborRate                    Decimal  @default(0) @map("labor_rate") @db.Decimal(12, 2)
+  rawMaterialCost              Decimal  @default(0) @map("raw_material_cost") @db.Decimal(14, 4)
+  outsideProcessCost           Decimal  @default(0) @map("outside_process_cost") @db.Decimal(14, 4)
+  estimatorNotes               String   @default("") @map("estimator_notes")
+  confidenceScore              Decimal? @map("confidence_score") @db.Decimal(5, 2)
+  createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("quote_estimates")
+}
+
+model ManufacturingBom {
+  id               BigInt    @id @default(autoincrement()) @db.BigInt
+  parentPartId     BigInt?   @map("parent_part_id") @db.BigInt
+  parentProductId  BigInt?   @map("parent_product_id") @db.BigInt
+  revision         String
+  status           String    @default("draft")
+  isItarControlled Boolean   @default(false) @map("is_itar_controlled")
+  approvedBy       BigInt?   @map("approved_by") @db.BigInt
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz(6)
+  effectiveFrom    DateTime? @map("effective_from") @db.Date
+  effectiveTo      DateTime? @map("effective_to") @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("manufacturing_boms")
+}
+
+model ManufacturingBomComponent {
+  id                  BigInt  @id @default(autoincrement()) @db.BigInt
+  bomId               BigInt  @map("bom_id") @db.BigInt
+  childPartId         BigInt? @map("child_part_id") @db.BigInt
+  childProductId      BigInt? @map("child_product_id") @db.BigInt
+  childBomId          BigInt? @map("child_bom_id") @db.BigInt
+  sequenceNumber      Int     @default(10) @map("sequence_number")
+  quantityPer         Decimal @map("quantity_per") @db.Decimal(14, 6)
+  unit                String  @default("each")
+  scrapPercent        Decimal @default(0) @map("scrap_percent") @db.Decimal(6, 3)
+  referenceDesignator String  @default("") @map("reference_designator")
+  isCriticalToQuality Boolean @default(false) @map("is_critical_to_quality")
+
+  @@unique([bomId, sequenceNumber])
+  @@map("manufacturing_bom_components")
+}
+
+model WorkOrderRouterOperation {
+  id                       BigInt    @id @default(autoincrement()) @db.BigInt
+  workOrderId              BigInt    @map("work_order_id") @db.BigInt
+  sourceRoutingOperationId BigInt?   @map("source_routing_operation_id") @db.BigInt
+  sequenceNumber           Int       @map("sequence_number")
+  workCenterId             BigInt    @map("work_center_id") @db.BigInt
+  assignedEmployeeId       BigInt?   @map("assigned_employee_id") @db.BigInt
+  operationName            String    @map("operation_name")
+  instructions             String    @default("")
+  estimatedSetupMinutes    Decimal   @default(0) @map("estimated_setup_minutes") @db.Decimal(12, 2)
+  estimatedRunMinutes      Decimal   @default(0) @map("estimated_run_minutes") @db.Decimal(12, 2)
+  actualSetupMinutes       Decimal   @default(0) @map("actual_setup_minutes") @db.Decimal(12, 2)
+  actualRunMinutes         Decimal   @default(0) @map("actual_run_minutes") @db.Decimal(12, 2)
+  active                   Boolean   @default(false)
+  status                   String    @default("pending")
+  startedAt                DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([workOrderId, sequenceNumber])
+  @@map("work_order_router_operations")
+}
+
+model SupplierMaterialDocument {
+  id                  BigInt   @id @default(autoincrement()) @db.BigInt
+  supplierId          BigInt?  @map("supplier_id") @db.BigInt
+  purchaseOrderId     BigInt?  @map("purchase_order_id") @db.BigInt
+  purchaseOrderLineId BigInt?  @map("purchase_order_line_id") @db.BigInt
+  documentType        String   @map("document_type")
+  documentNumber      String   @map("document_number")
+  fileUri             String   @map("file_uri")
+  uploadedBy          BigInt?  @map("uploaded_by") @db.BigInt
+  uploadedAt          DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  @@unique([documentType, documentNumber])
+  @@map("supplier_material_documents")
+}
+
+model InventoryLot {
+  id                         BigInt   @id @default(autoincrement()) @db.BigInt
+  partId                     BigInt?  @map("part_id") @db.BigInt
+  productId                  BigInt?  @map("product_id") @db.BigInt
+  lotNumber                  String   @map("lot_number")
+  heatNumber                 String   @map("heat_number")
+  serialNumber               String?  @map("serial_number")
+  quantityOnHand             Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(14, 4)
+  location                   String   @default("RECEIVING")
+  qualityStatus              String   @default("accepted") @map("quality_status")
+  holdReason                 String   @default("") @map("hold_reason")
+  supplierId                 BigInt?  @map("supplier_id") @db.BigInt
+  supplierMaterialDocumentId BigInt   @map("supplier_material_document_id") @db.BigInt
+  receivedAt                 DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  receivedBy                 BigInt?  @map("received_by") @db.BigInt
+  isItarControlled           Boolean  @default(false) @map("is_itar_controlled")
+
+  @@unique([partId, lotNumber, heatNumber, serialNumber])
+  @@map("inventory_lots")
+}
+
+model InventoryLotMovement {
+  id                         BigInt   @id @default(autoincrement()) @db.BigInt
+  inventoryLotId             BigInt   @map("inventory_lot_id") @db.BigInt
+  movementType               String   @map("movement_type")
+  quantity                   Decimal  @db.Decimal(14, 4)
+  fromLocation               String?  @map("from_location")
+  toLocation                 String?  @map("to_location")
+  workOrderId                BigInt?  @map("work_order_id") @db.BigInt
+  supplierMaterialDocumentId BigInt   @map("supplier_material_document_id") @db.BigInt
+  performedBy                BigInt?  @map("performed_by") @db.BigInt
+  performedAt                DateTime @default(now()) @map("performed_at") @db.Timestamptz(6)
+  ipAddress                  String?  @map("ip_address")
+  notes                      String   @default("")
+
+  @@map("inventory_lot_movements")
+}
+
+model ComplianceAuditLog {
+  id               BigInt   @id @default(autoincrement()) @db.BigInt
+  userId           BigInt?  @map("user_id") @db.BigInt
+  actionType       String   @map("action_type")
+  targetTable      String   @map("target_table")
+  targetRecordId   String   @map("target_record_id")
+  targetFileId     String?  @map("target_file_id")
+  isItarControlled Boolean  @default(false) @map("is_itar_controlled")
+  decision         String
+  severity         String   @default("info")
+  reason           String   @default("")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String   @default("") @map("user_agent")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([targetTable, targetRecordId])
+  @@index([createdAt])
+  @@map("compliance_audit_logs")
+}
+
+model MeasurementInstrument {
+  id                BigInt   @id @default(autoincrement()) @db.BigInt
+  instrumentNumber  String   @unique @map("instrument_number")
+  instrumentType    String   @map("instrument_type")
+  description       String   @default("")
+  serialNumber      String   @default("") @map("serial_number")
+  ownerWorkCenterId BigInt?  @map("owner_work_center_id") @db.BigInt
+  calibrationDueAt  DateTime @map("calibration_due_at") @db.Timestamptz(6)
+  status            String   @default("active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([calibrationDueAt, status])
+  @@map("measurement_instruments")
+}
+
+model InstrumentCalibrationEvent {
+  id                      BigInt   @id @default(autoincrement()) @db.BigInt
+  measurementInstrumentId BigInt   @map("measurement_instrument_id") @db.BigInt
+  calibratedAt            DateTime @map("calibrated_at") @db.Timestamptz(6)
+  calibrationDueAt        DateTime @map("calibration_due_at") @db.Timestamptz(6)
+  calibratedBy            BigInt?  @map("calibrated_by") @db.BigInt
+  certificateDocumentId   BigInt?  @map("certificate_document_id") @db.BigInt
+  result                  String
+  notes                   String   @default("")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("instrument_calibration_events")
+}
+
+model RoutingStepRequiredInstrument {
+  id                      BigInt @id @default(autoincrement()) @db.BigInt
+  workOrderId             BigInt @map("work_order_id") @db.BigInt
+  routingStepId           BigInt @map("routing_step_id") @db.BigInt
+  measurementInstrumentId BigInt @map("measurement_instrument_id") @db.BigInt
+  requiredForStatus       String @default("SETUP") @map("required_for_status")
+
+  @@unique([routingStepId, measurementInstrumentId])
+  @@index([routingStepId])
+  @@map("routing_step_required_instruments")
+}
+
+model InspectionRecord {
+  id                      BigInt   @id @default(autoincrement()) @db.BigInt
+  workOrderId             BigInt   @map("work_order_id") @db.BigInt
+  routingStepId           BigInt   @map("routing_step_id") @db.BigInt
+  inspectionType          String   @map("inspection_type")
+  measurementInstrumentId BigInt?  @map("measurement_instrument_id") @db.BigInt
+  operatorUserId          BigInt?  @map("operator_user_id") @db.BigInt
+  employeeId              String   @map("employee_id")
+  result                  String
+  signatureHash           String   @map("signature_hash")
+  signedAt                DateTime @default(now()) @map("signed_at") @db.Timestamptz(6)
+  notes                   String   @default("")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([workOrderId, routingStepId])
+  @@map("inspection_records")
+}
+
+model InspectionMeasurement {
+  id                   BigInt   @id @default(autoincrement()) @db.BigInt
+  inspectionRecordId   BigInt   @map("inspection_record_id") @db.BigInt
+  characteristicNumber String   @map("characteristic_number")
+  description          String
+  nominalValue         Decimal  @map("nominal_value") @db.Decimal(14, 6)
+  lowerTolerance       Decimal  @default(0) @map("lower_tolerance") @db.Decimal(14, 6)
+  upperTolerance       Decimal  @default(0) @map("upper_tolerance") @db.Decimal(14, 6)
+  actualValue          Decimal  @map("actual_value") @db.Decimal(14, 6)
+  unit                 String   @default("in")
+  passFail             String   @map("pass_fail")
+  measuredAt           DateTime @default(now()) @map("measured_at") @db.Timestamptz(6)
+
+  @@index([inspectionRecordId])
+  @@map("inspection_measurements")
+}
+
+model FaiReport {
+  id            BigInt   @id @default(autoincrement()) @db.BigInt
+  workOrderId   BigInt   @map("work_order_id") @db.BigInt
+  partNumber    String   @map("part_number")
+  partName      String   @default("") @map("part_name")
+  revision      String   @default("")
+  reportNumber  String   @unique @map("report_number")
+  form1         Json
+  form2         Json
+  form3         Json
+  result        String
+  preparedBy    BigInt?  @map("prepared_by") @db.BigInt
+  signatureHash String   @map("signature_hash")
+  signedAt      DateTime @default(now()) @map("signed_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([workOrderId])
+  @@map("fai_reports")
+}
+
+model NonConformanceReport {
+  id              BigInt   @id @default(autoincrement()) @db.BigInt
+  ncrNumber       String   @unique @map("ncr_number")
+  workOrderId     BigInt   @map("work_order_id") @db.BigInt
+  routingStepId   BigInt?  @map("routing_step_id") @db.BigInt
+  inventoryLotId  BigInt?  @map("inventory_lot_id") @db.BigInt
+  reportedBy      BigInt?  @map("reported_by") @db.BigInt
+  employeeId      String   @map("employee_id")
+  quantityScrapped Int     @map("quantity_scrapped")
+  defectCode      String   @map("defect_code")
+  description     String
+  severity        String   @default("major")
+  status          String   @default("open")
+  signatureHash   String   @map("signature_hash")
+  reportedAt      DateTime @default(now()) @map("reported_at") @db.Timestamptz(6)
+
+  @@index([workOrderId, status])
+  @@map("non_conformance_reports")
+}
+
+model CorrectivePreventiveAction {
+  id               BigInt   @id @default(autoincrement()) @db.BigInt
+  capaNumber       String   @unique @map("capa_number")
+  ncrId            BigInt   @map("ncr_id") @db.BigInt
+  ownerUserId      BigInt?  @map("owner_user_id") @db.BigInt
+  containmentAction String  @map("containment_action")
+  rootCause        String   @default("") @map("root_cause")
+  correctiveAction String   @default("") @map("corrective_action")
+  preventiveAction String   @default("") @map("preventive_action")
+  dueAt            DateTime @map("due_at") @db.Timestamptz(6)
+  status           String   @default("open")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ncrId, status])
+  @@map("corrective_preventive_actions")
+}
+
+model InventoryPlanningItem {
+  id                    BigInt    @id @default(autoincrement()) @db.BigInt
+  partNumber            String    @unique @map("part_number")
+  description           String?
+  quantity              Decimal?  @default(0) @db.Decimal(14, 4)
+  unitPrice             Decimal?  @default(0) @map("unit_price") @db.Decimal(10, 2)
+  lastUpdated           DateTime? @default(now()) @map("last_updated")
+  reorderPoint          Decimal   @default(0) @map("reorder_point") @db.Decimal(14, 4)
+  unit                  String    @default("EA")
+  location              String    @default("MAIN")
+  supplierId            BigInt?   @map("supplier_id") @db.BigInt
+  leadTimeDays          Int       @default(0) @map("lead_time_days")
+  availableStock        Decimal?  @map("available_stock") @db.Decimal(14, 4)
+  allocatedStock        Decimal   @default(0) @map("allocated_stock") @db.Decimal(14, 4)
+  onOrder               Decimal   @default(0) @map("on_order") @db.Decimal(14, 4)
+  safetyStock           Decimal   @default(0) @map("safety_stock") @db.Decimal(14, 4)
+  preferredVendorId     BigInt?   @map("preferred_vendor_id") @db.BigInt
+  nextExpectedReceiptAt DateTime? @map("next_expected_receipt_at") @db.Date
+
+  @@index([partNumber, preferredVendorId, leadTimeDays])
+  @@map("inventory")
+}
+
+model MrpRun {
+  id                    BigInt   @id @default(autoincrement()) @db.BigInt
+  runId                 String   @unique @map("run_id")
+  status                String   @default("completed")
+  activeWorkOrderCount  Int      @default(0) @map("active_work_order_count")
+  activeSalesOrderCount Int      @default(0) @map("active_sales_order_count")
+  partsAnalyzed         Int      @default(0) @map("parts_analyzed")
+  shortagesFound        Int      @default(0) @map("shortages_found")
+  diagnostics           Json     @default("[]")
+  createdBy             BigInt?  @map("created_by") @db.BigInt
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@map("mrp_runs")
+}
+
+model MrpPurchaseOrderQueue {
+  id                   BigInt    @id @default(autoincrement()) @db.BigInt
+  runId                String    @map("run_id")
+  preferredVendorId    BigInt?   @map("preferred_vendor_id") @db.BigInt
+  partNumber           String    @map("part_number")
+  description          String    @default("")
+  grossRequirement     Decimal   @map("gross_requirement") @db.Decimal(14, 4)
+  availableStock       Decimal   @map("available_stock") @db.Decimal(14, 4)
+  allocatedStock       Decimal   @default(0) @map("allocated_stock") @db.Decimal(14, 4)
+  onOrder              Decimal   @default(0) @map("on_order") @db.Decimal(14, 4)
+  safetyStock          Decimal   @default(0) @map("safety_stock") @db.Decimal(14, 4)
+  netRequirement       Decimal   @map("net_requirement") @db.Decimal(14, 4)
+  suggestedOrderQty    Decimal   @map("suggested_order_qty") @db.Decimal(14, 4)
+  estimatedUnitCost    Decimal   @default(0) @map("estimated_unit_cost") @db.Decimal(14, 4)
+  estimatedTotalCost   Decimal   @default(0) @map("estimated_total_cost") @db.Decimal(14, 2)
+  leadTimeDays         Int       @default(0) @map("lead_time_days")
+  requiredBy           DateTime? @map("required_by") @db.Date
+  estimatedArrivalDate DateTime? @map("estimated_arrival_date") @db.Date
+  priority             String    @default("standard")
+  status               String    @default("draft")
+  sourceWorkOrders     Json      @default("[]") @map("source_work_orders")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([runId, preferredVendorId, status])
+  @@index([partNumber, status])
+  @@map("mrp_purchase_order_queue")
+}
+
+model MrpRescheduleSignal {
+  id                       BigInt    @id @default(autoincrement()) @db.BigInt
+  runId                    String    @map("run_id")
+  workOrderId              BigInt?   @map("work_order_id") @db.BigInt
+  partNumber               String    @map("part_number")
+  currentDueDate           DateTime? @map("current_due_date") @db.Date
+  estimatedMaterialArrival DateTime? @map("estimated_material_arrival") @db.Date
+  projectedStartDate       DateTime? @map("projected_start_date") @db.Date
+  riskLevel                String    @map("risk_level")
+  message                  String
+  status                   String    @default("open")
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([workOrderId, status])
+  @@map("mrp_reschedule_signals")
+}
+
+model AiQuoteIntakeProposal {
+  id                    BigInt    @id @default(autoincrement()) @db.BigInt
+  proposalNumber        String    @unique @map("proposal_number")
+  sourceType            String    @default("customer_email") @map("source_type")
+  sourceTextHash        String    @map("source_text_hash")
+  customerId            String?   @map("customer_id")
+  partNumber            String    @map("part_number")
+  revisionNumber        String    @default("") @map("revision_number")
+  materialGrade         String    @map("material_grade")
+  materialVolume        Decimal   @default(0) @map("material_volume") @db.Decimal(14, 4)
+  materialUnit          String    @default("in3") @map("material_unit")
+  estimatedSetupMinutes Decimal   @default(0) @map("estimated_setup_minutes") @db.Decimal(12, 2)
+  estimatedCycleMinutes Decimal   @default(0) @map("estimated_cycle_minutes") @db.Decimal(12, 2)
+  secondaryFinishes     Json      @default("[]") @map("secondary_finishes")
+  estimatorNotes        String    @default("") @map("estimator_notes")
+  confidenceScore       Decimal?  @map("confidence_score") @db.Decimal(5, 2)
+  modelProvider         String    @map("model_provider")
+  modelName             String    @map("model_name")
+  rawModelOutput        Json      @map("raw_model_output")
+  validationStatus      String    @default("draft_proposal") @map("validation_status")
+  requiresQaApproval    Boolean   @default(true) @map("requires_qa_approval")
+  reviewedBy            BigInt?   @map("reviewed_by") @db.BigInt
+  reviewedAt            DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNotes           String    @default("") @map("review_notes")
+  createdBy             BigInt?   @map("created_by") @db.BigInt
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([validationStatus, createdAt])
+  @@index([partNumber, revisionNumber])
+  @@map("ai_quote_intake_proposals")
+}
+
+model AiQuoteIntakeBomDraft {
+  id                   BigInt   @id @default(autoincrement()) @db.BigInt
+  proposalId           BigInt   @map("proposal_id") @db.BigInt
+  parentPartNumber     String   @map("parent_part_number")
+  componentPartNumber  String   @map("component_part_number")
+  componentDescription String   @default("") @map("component_description")
+  materialGrade        String   @default("") @map("material_grade")
+  quantityPer          Decimal  @map("quantity_per") @db.Decimal(14, 6)
+  unit                 String   @default("each")
+  sourceConfidence     Decimal? @map("source_confidence") @db.Decimal(5, 2)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([proposalId])
+  @@map("ai_quote_intake_bom_drafts")
+}
+
+model AiQuoteIntakeRouterDraft {
+  id                    BigInt   @id @default(autoincrement()) @db.BigInt
+  proposalId            BigInt   @map("proposal_id") @db.BigInt
+  sequenceNumber        Int      @map("sequence_number")
+  operationName         String   @map("operation_name")
+  workCenterCode        String   @map("work_center_code")
+  estimatedSetupMinutes Decimal  @default(0) @map("estimated_setup_minutes") @db.Decimal(12, 2)
+  estimatedRunMinutes   Decimal  @default(0) @map("estimated_run_minutes") @db.Decimal(12, 2)
+  outsideProcess        Boolean  @default(false) @map("outside_process")
+  finishSpecification   String   @default("") @map("finish_specification")
+  qaRequired            Boolean  @default(false) @map("qa_required")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([proposalId, sequenceNumber])
+  @@index([proposalId])
+  @@map("ai_quote_intake_router_drafts")
 }

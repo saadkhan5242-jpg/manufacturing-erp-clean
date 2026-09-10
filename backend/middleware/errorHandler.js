@@ -2,9 +2,9 @@ import { logger } from "../utils/logger.js";
 import { isDatabaseError } from "../db/pool.js";
 
 export default function errorHandler(error, req, res, _next) {
-  const databaseUnavailable = error.statusCode === 503 || isDatabaseError(error);
+  const databaseUnavailable = error.isDatabaseUnavailable || isDatabaseError(error);
   const statusCode = databaseUnavailable ? 503 : error.statusCode || 500;
-  const message = databaseUnavailable ? error.publicMessage || "Database temporarily unavailable. The API is starting up or reconnecting." : statusCode === 500 ? "Internal server error" : error.message;
+  const message = databaseUnavailable ? error.publicMessage || "Database temporarily unavailable. The API is starting up or reconnecting." : statusCode === 500 ? "Internal server error" : error.publicMessage || error.message;
   const requestId = req.requestId || "unknown";
 
   if (databaseUnavailable) {
@@ -15,5 +15,5 @@ export default function errorHandler(error, req, res, _next) {
     logger.warn({ requestId, url: req.originalUrl, method: req.method, statusCode, message }, "Client/Operational Request Exception");
   }
 
-  res.status(statusCode).json({ error: message, code: databaseUnavailable ? "API_DATABASE_UNAVAILABLE" : undefined, retryable: databaseUnavailable || undefined, requestId });
+  res.status(statusCode).json({ error: message, code: databaseUnavailable ? "API_DATABASE_UNAVAILABLE" : error.code, retryable: databaseUnavailable || error.retryable || undefined, requestId });
 }

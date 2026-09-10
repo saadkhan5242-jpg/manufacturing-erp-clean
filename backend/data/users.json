@@ -5,6 +5,7 @@
     "email": "admin@global-shop.local",
     "role": "admin",
     "active": true,
+    "is_us_citizen_or_permanent_resident": true,
     "passwordHash": "$2b$12$HeOqXmZEjwSZ9eY39fFjiuqxr.WzmIYTZpVj6SOU4HUnTsoPPKFsG"
   }
 ]

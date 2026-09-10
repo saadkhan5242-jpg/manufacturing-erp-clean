@@ -18,6 +18,7 @@ const select = `
     wo.part_number AS "partNumber",
     wo.quantity,
     wo.status,
+    wo.is_itar_controlled AS "is_itar_controlled",
     wo.due_date AS "dueDate",
     wo.created_at AS "createdAt",
     wo.updated_at AS "updatedAt"
@@ -30,7 +31,7 @@ function normalize(input) {
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error("quantity must be greater than zero");
   const status = input.status ? String(input.status).toLowerCase() : "open";
   if (!statuses.has(status)) throw new Error(`status must be one of: ${[...statuses].join(", ")}`);
-  return { orderNumber: String(input.orderNumber || `WO-${Date.now()}`).trim(), partNumber: input.partNumber.trim(), quantity, status, dueDate: input.dueDate || null };
+  return { orderNumber: String(input.orderNumber || `WO-${Date.now()}`).trim(), partNumber: input.partNumber.trim(), quantity, status, dueDate: input.dueDate || null, isItarControlled: Boolean(input.is_itar_controlled || input.isItarControlled) };
 }
 
 function buildListQuery(filters = {}) {
@@ -42,6 +43,7 @@ function buildListQuery(filters = {}) {
   };
 
   if (filters.status) clauses.push(`wo.status = ${add(filters.status)}`);
+  if (filters.includeItarControlled === false) clauses.push("wo.is_itar_controlled = FALSE");
   if (filters.search) {
     const term = `%${filters.search}%`;
     clauses.push(`(wo.order_number ILIKE ${add(term)} OR wo.part_number ILIKE ${add(term)})`);
@@ -142,22 +144,22 @@ export async function getWorkOrder(id) {
 export async function createWorkOrder(input) {
   const item = normalize(input);
   return (await query(
-    "INSERT INTO work_orders (order_number, part_number, quantity, status, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
-    [item.orderNumber, item.partNumber, item.quantity, item.status, item.dueDate]
+    "INSERT INTO work_orders (order_number, part_number, quantity, status, due_date, is_itar_controlled) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, is_itar_controlled AS \"is_itar_controlled\", due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
+    [item.orderNumber, item.partNumber, item.quantity, item.status, item.dueDate, item.isItarControlled]
   )).rows[0];
 }
 
 export async function updateWorkOrder(id, input) {
   const item = normalize(input);
   return (await query(
-    "UPDATE work_orders SET order_number = $1, part_number = $2, quantity = $3, status = $4, due_date = $5, updated_at = NOW() WHERE id = $6 RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
-    [item.orderNumber, item.partNumber, item.quantity, item.status, item.dueDate, id]
+    "UPDATE work_orders SET order_number = $1, part_number = $2, quantity = $3, status = $4, due_date = $5, is_itar_controlled = $6, updated_at = NOW() WHERE id = $7 RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, is_itar_controlled AS \"is_itar_controlled\", due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
+    [item.orderNumber, item.partNumber, item.quantity, item.status, item.dueDate, item.isItarControlled, id]
   )).rows[0];
 }
 
 export async function updateWorkOrderStatus(id, status) {
   return (await query(
-    "UPDATE work_orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
+    "UPDATE work_orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, order_number AS \"orderNumber\", part_number AS \"partNumber\", quantity, status, is_itar_controlled AS \"is_itar_controlled\", due_date AS \"dueDate\", created_at AS \"createdAt\", updated_at AS \"updatedAt\"",
     [status, id]
   )).rows[0];
 }

@@ -5,7 +5,8 @@ import apiClient from "../lib/apiClient.js";
 const INPUT_FIELDS = [
   { id: "employeeId", label: "Badge", inputMode: "text" },
   { id: "workOrderId", label: "Work order", inputMode: "numeric" },
-  { id: "operationId", label: "Operation", inputMode: "numeric" }
+  { id: "operationId", label: "Operation", inputMode: "numeric" },
+  { id: "measurementInstrumentId", label: "Gage ID", inputMode: "numeric" }
 ];
 
 function buildActionRows(activeLog, handlers) {
@@ -41,10 +42,13 @@ function KioskActionButton({ action }) {
 }
 
 export default function ShopFloorKiosk() {
-  const [entry, setEntry] = useState({ employeeId: "", workOrderId: "", operationId: "" });
+  const [entry, setEntry] = useState({ employeeId: "", workOrderId: "", operationId: "", measurementInstrumentId: "" });
   const [activeField, setActiveField] = useState("employeeId");
   const [activeLog, setActiveLog] = useState(null);
   const [partsProduced, setPartsProduced] = useState(0);
+  const [partsScrapped, setPartsScrapped] = useState(0);
+  const [defectCode, setDefectCode] = useState("");
+  const [nonConformanceDescription, setNonConformanceDescription] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState({ type: "idle", text: "Ready for badge scan or touch entry." });
@@ -80,6 +84,7 @@ export default function ShopFloorKiosk() {
         employeeId: entry.employeeId,
         workOrderId: Number(entry.workOrderId),
         routerOperationId: Number(entry.operationId),
+        measurementInstrumentId: entry.measurementInstrumentId ? Number(entry.measurementInstrumentId) : undefined,
         jobStatus
       });
       setActiveLog(data?.logId || `${entry.employeeId}-${entry.workOrderId}-${entry.operationId}`);
@@ -93,15 +98,22 @@ export default function ShopFloorKiosk() {
 
   const clockOut = async () => {
     if (!activeLog) return;
+    if (partsScrapped > 0 && (!defectCode || !nonConformanceDescription)) {
+      setStatus({ type: "error", text: "Scrap closeout requires a defect code and NCR description." });
+      return;
+    }
     setStatus({ type: "busy", text: "Posting labor closeout and parts produced..." });
     try {
       await apiClient.post("/api/shopfloor/clock-out", {
         logId: activeLog,
         partsProduced: Number(partsProduced),
+        partsScrapped: Number(partsScrapped),
+        defectCode: partsScrapped > 0 ? defectCode : undefined,
+        nonConformanceDescription: partsScrapped > 0 ? nonConformanceDescription : undefined,
         finalStatus: "COMPLETED",
         qualityCheckpoint: {
           passedCount: Number(partsProduced),
-          failedCount: 0,
+          failedCount: Number(partsScrapped),
           employeeId: entry.employeeId,
           employeeTimestamp: new Date().toISOString(),
           notes: `Operator closeout for work order ${entry.workOrderId}`
@@ -110,6 +122,9 @@ export default function ShopFloorKiosk() {
       addEvent(`Clocked out with ${partsProduced} good pieces`);
       setActiveLog(null);
       setPartsProduced(0);
+      setPartsScrapped(0);
+      setDefectCode("");
+      setNonConformanceDescription("");
       setElapsedSeconds(0);
       setStatus({ type: "success", text: "Job labor was dispatched successfully." });
     } catch (error) {
@@ -128,8 +143,11 @@ export default function ShopFloorKiosk() {
   };
 
   const clearEntry = () => {
-    setEntry({ employeeId: "", workOrderId: "", operationId: "" });
+    setEntry({ employeeId: "", workOrderId: "", operationId: "", measurementInstrumentId: "" });
     setPartsProduced(0);
+    setPartsScrapped(0);
+    setDefectCode("");
+    setNonConformanceDescription("");
     setActiveField("employeeId");
   };
 
@@ -153,7 +171,7 @@ export default function ShopFloorKiosk() {
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="grid gap-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {INPUT_FIELDS.map((field) => (
               <label key={field.id} className={`rounded-lg border p-3 transition ${activeField === field.id ? "border-teal-600 bg-teal-50" : "border-slate-200 bg-slate-50"}`}>
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{field.label}</span>
@@ -183,10 +201,26 @@ export default function ShopFloorKiosk() {
                 className="mt-2 w-full bg-transparent text-2xl font-black text-slate-950 outline-none"
               />
             </label>
+            <label className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Scrap pieces</span>
+              <input
+                value={partsScrapped}
+                inputMode="numeric"
+                onChange={(event) => setPartsScrapped(Number(event.target.value) || 0)}
+                className="mt-2 w-full bg-transparent text-2xl font-black text-slate-950 outline-none"
+              />
+            </label>
             <button type="button" onClick={clearEntry} className="inline-flex min-h-20 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-black text-slate-700 hover:border-slate-500">
               <Eraser className="h-5 w-5" aria-hidden="true" /> Clear
             </button>
           </div>
+
+          {partsScrapped > 0 && (
+            <div className="grid gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 sm:grid-cols-[160px_1fr]">
+              <label className="text-xs font-bold uppercase tracking-wide text-rose-700">Defect code<input value={defectCode} onChange={(event) => setDefectCode(event.target.value)} className="mt-2 w-full rounded-md border border-rose-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-rose-500" placeholder="DIM-FAIL" /></label>
+              <label className="text-xs font-bold uppercase tracking-wide text-rose-700">NCR description<input value={nonConformanceDescription} onChange={(event) => setNonConformanceDescription(event.target.value)} className="mt-2 w-full rounded-md border border-rose-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-rose-500" placeholder="Measured bore out of tolerance; freeze operation and segregate lot." /></label>
+            </div>
+          )}
 
           <div className={`rounded-lg border px-4 py-3 text-sm font-bold ${statusTone}`}>{status.text}</div>
         </div>

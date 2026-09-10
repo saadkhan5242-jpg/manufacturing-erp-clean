@@ -6,7 +6,7 @@ const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === "productio
 const tokenLifetime = process.env.JWT_EXPIRES_IN || "8h";
 
 function users() {
-  return loadCollection("users.json", [{ id: 1, name: "Operations Admin", email: "admin@global-shop.local", role: "admin", active: true }]);
+  return loadCollection("users.json", [{ id: 1, name: "Operations Admin", email: "admin@global-shop.local", role: "admin", active: true, is_us_citizen_or_permanent_resident: true }]);
 }
 
 export async function ensureAdminPassword() {
@@ -27,8 +27,9 @@ export async function ensureAdminPassword() {
 export async function login(email, password) {
   const user = users().find((candidate) => candidate.email.toLowerCase() === String(email).trim().toLowerCase());
   if (!user || !user.active || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) return null;
-  const token = jwt.sign({ sub: user.id, email: user.email, role: user.role, name: user.name }, jwtSecret, { expiresIn: tokenLifetime });
-  return { token, expiresIn: tokenLifetime, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  const isUsPerson = Boolean(user.is_us_citizen_or_permanent_resident || user.isUsCitizenOrPermanentResident);
+  const token = jwt.sign({ sub: user.id, email: user.email, role: user.role, name: user.name, is_us_citizen_or_permanent_resident: isUsPerson }, jwtSecret, { expiresIn: tokenLifetime });
+  return { token, expiresIn: tokenLifetime, user: { id: user.id, name: user.name, email: user.email, role: user.role, is_us_citizen_or_permanent_resident: isUsPerson } };
 }
 
 export function verifyToken(token) {

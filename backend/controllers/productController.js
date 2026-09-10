@@ -5,6 +5,8 @@ import {
   removeProduct,
   updateProduct
 } from "../services/productService.js";
+import { isUsPerson } from "../middleware/itarAccess.js";
+import { recordComplianceAudit } from "../services/complianceAuditService.js";
 import { normalizeProduct, validateProduct } from "../validation/productValidation.js";
 
 function validateOrRespond(body, res) {
@@ -16,8 +18,16 @@ function validateOrRespond(body, res) {
   return true;
 }
 
-export function list(_req, res) {
-  res.json(listProducts());
+export async function list(req, res) {
+  const products = listProducts();
+  if (isUsPerson(req.user)) {
+    await Promise.all(products.filter((product) => product.is_itar_controlled).map((product) => recordComplianceAudit({ req, actionType: "VIEW", targetTable: "products", targetRecordId: product.id, isItarControlled: true, decision: "allowed", reason: "US person listed ITAR product" })));
+    return res.json(products);
+  }
+
+  const blocked = products.filter((product) => product.is_itar_controlled);
+  await Promise.all(blocked.map((product) => recordComplianceAudit({ req, actionType: "VIEW", targetTable: "products", targetRecordId: product.id, isItarControlled: true, decision: "blocked", reason: "Non-US person product list filtered" })));
+  return res.json(products.filter((product) => !product.is_itar_controlled));
 }
 
 export function detail(req, res) {

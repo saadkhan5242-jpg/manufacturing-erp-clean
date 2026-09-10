@@ -5,7 +5,8 @@
     "sku": "PROD-001",
     "description": "Finished gear assembly",
     "unitPrice": 125.5,
-    "active": true
+    "active": true,
+    "is_itar_controlled": false
   },
   {
     "id": 2,
@@ -13,7 +14,8 @@
     "sku": "DEMO-ERP-2026-MANIFOLD",
     "description": "Five-port aluminum hydraulic manifold",
     "unitPrice": 485,
-    "active": true
+    "active": true,
+    "is_itar_controlled": false
   },
   {
     "id": 3,
@@ -21,6 +23,7 @@
     "sku": "DEMO-ERP-2026-SHAFT",
     "description": "Ground steel drive shaft",
     "unitPrice": 215,
-    "active": true
+    "active": true,
+    "is_itar_controlled": false
   }
 ]

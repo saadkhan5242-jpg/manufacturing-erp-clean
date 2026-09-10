@@ -5,6 +5,7 @@ import { verifySupervisorPinHandler } from "../middleware/supervisorAuth.js";
 import { validateBody, validateQuery } from "../middleware/validate.js";
 import { broadcastShopFloorEvent, subscribeToShopFloorEvents } from "../services/shopFloorEventBus.js";
 import { recordQualityCheckpoint } from "../services/qualityCheckpointService.js";
+import { assertSetupCalibrationValid, fileNcr } from "../services/qmsService.js";
 import { clockInSchema, clockOutSchema, paginationQuerySchema, shopFloorActionSchema } from "../validators/schemas.js";
 
 const router = Router();
@@ -89,7 +90,7 @@ router.get("/events", (req, res) => {
 });
 
 router.post("/clock-in", validateBody(clockInSchema), async (req, res) => {
-  const { employeeId, employeeNumber, workOrderId, workOrderNumber, routerOperationId, sequence, jobStatus } = req.body;
+  const { employeeId, employeeNumber, workOrderId, workOrderNumber, routerOperationId, sequence, measurementInstrumentId, jobStatus } = req.body;
   const operatorId = employeeId || employeeNumber;
   const targetWorkOrderId = workOrderId || workOrderNumber;
   const rawSeq = routerOperationId || sequence || "10";
@@ -103,6 +104,10 @@ router.post("/clock-in", validateBody(clockInSchema), async (req, res) => {
       select: { id: true, sequenceNumber: true, workCenterCode: true }
     });
     if (!targetRoute) return res.status(404).json({ error: "Routing operation not found", requestId: req.requestId });
+
+    if (jobStatus === "SETUP") {
+      await assertSetupCalibrationValid({ workOrderId: targetOrder.id, routingStepId: targetRoute.id, measurementInstrumentId });
+    }
 
     const laborLog = await prisma.$transaction(async (tx) => {
       const created = await tx.laborTransaction.create({
@@ -127,7 +132,8 @@ router.post("/clock-in", validateBody(clockInSchema), async (req, res) => {
       employeeId: operatorId,
       jobStatus,
       sequence: targetRoute.sequenceNumber,
-      machine: targetRoute.workCenterCode
+      machine: targetRoute.workCenterCode,
+      measurementInstrumentId: measurementInstrumentId || null
     });
     broadcastShopFloorEvent("job-status", payload);
     return res.status(201).json(payload);
@@ -163,7 +169,7 @@ router.post("/actions", validateBody(shopFloorActionSchema), async (req, res) =>
 });
 
 router.post("/clock-out", validateBody(clockOutSchema), async (req, res) => {
-  const { employeeId, workOrderId, partsProduced, logId, finalStatus, qualityCheckpoint } = req.body;
+  const { employeeId, workOrderId, partsProduced, partsScrapped, inventoryLotId, defectCode, nonConformanceDescription, logId, finalStatus, qualityCheckpoint } = req.body;
   const targetLogId = logId ? Number(logId) : null;
 
   try {
@@ -187,8 +193,8 @@ router.post("/clock-out", validateBody(clockOutSchema), async (req, res) => {
     const closedPunch = await prisma.$transaction(async (tx) => {
       const updated = await tx.laborTransaction.update({
         where: { id: activePunch.id },
-        data: { endTime: now, runHours: finalStatus === "COMPLETED" ? elapsedHours : 0, piecesProduced: partsProduced },
-        select: { id: true, employeeId: true, workOrderId: true, routingStepId: true, endTime: true, piecesProduced: true }
+        data: { endTime: now, runHours: finalStatus === "COMPLETED" ? elapsedHours : 0, piecesProduced: partsProduced, piecesScrapped: partsScrapped },
+        select: { id: true, employeeId: true, workOrderId: true, routingStepId: true, endTime: true, piecesProduced: true, piecesScrapped: true }
       });
 
       await tx.workOrder.update({
@@ -200,11 +206,22 @@ router.post("/clock-out", validateBody(clockOutSchema), async (req, res) => {
     });
 
     const checkpoint = recordQualityCheckpoint(activePunch.workOrderId, qualityCheckpoint, qualityCheckpoint.failedCount > 0 ? "failed" : "passed");
+    const ncrWorkflow = partsScrapped > 0 ? await fileNcr({
+      workOrderId: Number(activePunch.workOrderId),
+      routingStepId: Number(activePunch.routingStepId),
+      inventoryLotId,
+      employeeId: activePunch.employeeId,
+      quantityScrapped: partsScrapped,
+      defectCode,
+      description: nonConformanceDescription,
+      severity: "major"
+    }, req) : null;
     await absorbManufacturingCosts(closedPunch.id);
 
-    const payload = toSerializable({ message: "Operator clocked out and manufacturing costs absorbed successfully!", laborTransaction: closedPunch, qualityCheckpoint: checkpoint });
+    const payload = toSerializable({ message: "Operator clocked out and manufacturing costs absorbed successfully!", laborTransaction: closedPunch, qualityCheckpoint: checkpoint, ncrWorkflow });
     broadcastShopFloorEvent("job-status", payload);
     broadcastShopFloorEvent("quality-checkpoint", payload);
+    if (ncrWorkflow) broadcastShopFloorEvent("non-conformance", ncrWorkflow);
     return res.status(200).json(payload);
   } catch (error) {
     console.error("Exception handled inside cloud clock out transaction:", error.message);

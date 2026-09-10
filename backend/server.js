@@ -21,6 +21,7 @@ import maintenanceRouter from "./routes/maintenanceRouter.js";
 import routingRouter from "./routes/routingRouter.js";
 import documentsRouter from "./routes/documentsRouter.js";
 import reportsRouter from "./routes/reportsRouter.js";
+import qualityRouter from "./routes/qualityRouter.js";
 import { createModuleRouter } from "./routes/moduleRouter.js";
 import errorHandler from "./middleware/errorHandler.js";
 import { authenticate, protectWrites, requireRoles } from "./middleware/auth.js";
@@ -42,6 +43,7 @@ import laborRouter from "./routes/laborRouter.js";
 import laborLogRouter from "./routes/laborLogRouter.js";
 import biRouter from "./routes/biRouter.js";
 import { startLaborAccumulatorDaemon } from "./services/laborAccumulatorDaemon.js";
+import { startMrpScheduler } from "./services/mrpEngineService.js";
 import flJobsRouter from "./routes/flJobsRouter.js";
 import flVendorsRouter from "./routes/flVendorsRouter.js";
 import flQuotesRouter from "./routes/flQuotesRouter.js";
@@ -49,6 +51,7 @@ import flAiRouter from "./routes/flAiRouter.js";
 import flCadRouter from "./routes/flCadRouter.js";
 import healthRouter from "./routes/healthRouter.js";
 import aiServiceRouter from "./ai/aiServiceRouter.js";
+import aiIntakeRouter from "./routes/aiIntakeRouter.js";
 import cadRouter from "./cad/cadRouter.js";
 import quickbooksRouter from "./quickbooks/quickbooksRouter.js";
 import { setupSwagger } from "./config/swagger.js";
@@ -98,6 +101,7 @@ app.use("/api/fl/cad", flCadRouter);
 // ForgeLogic AI — production service layers
 app.use("/api/health", healthRouter);
 app.use("/api/fl/ai-engine", aiServiceRouter);
+app.use("/api/ai-intake", aiIntakeRouter);
 app.use("/api/cad", cadRouter);
 app.use("/api/quickbooks", quickbooksRouter);
 
@@ -120,6 +124,7 @@ app.use("/api/maintenance", maintenanceRouter);
 app.use("/api/routings", routingRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/quality", qualityRouter);
 app.use("/api/users", authenticate, requireRoles("admin"));
 app.use("/api/tax-settings", authenticate, requireRoles("admin", "finance"));
 app.use("/api/accounting/entries", authenticate, requireRoles("admin", "finance"));
@@ -131,7 +136,7 @@ app.use("/api/sales-orders", createModuleRouter({ filename: "salesOrders.json", 
 app.use("/api/receipts", createModuleRouter({ filename: "receipts.json", seed: [] }));
 app.use("/api/quality-inspections", createModuleRouter({ filename: "qualityInspections.json", seed: [{ id: 1, workOrderId: 1, inspectionType: "First article", status: "pending", result: "" }] }));
 app.use("/api/traceability", createModuleRouter({ filename: "traceability.json", seed: [] }));
-app.use("/api/users", createModuleRouter({ filename: "users.json", seed: [{ id: 1, name: "Operations Admin", email: "admin@global-shop.local", role: "admin", active: true }] }));
+app.use("/api/users", createModuleRouter({ filename: "users.json", seed: [{ id: 1, name: "Operations Admin", email: "admin@global-shop.local", role: "admin", active: true, is_us_citizen_or_permanent_resident: true }] }));
 app.use("/api/tax-settings", createModuleRouter({ filename: "taxSettings.json", seed: [{ id: 1, name: "Standard rate", code: "STANDARD", rate: 0, active: true }] }));
 app.use("/api/finite-schedule", createModuleRouter({ filename: "finiteSchedule.json", seed: [] }));
 app.use("/api/outside-processes", createModuleRouter({ filename: "outsideProcesses.json", seed: [] }));
@@ -179,6 +184,7 @@ const startServer = async () => {
 
       // Boot the autonomous labor clock accumulator background daemon
       startLaborAccumulatorDaemon();
+      startMrpScheduler();
     });
 
     // Trap uncaught routing pipeline crashes so the server process stays alive permanently

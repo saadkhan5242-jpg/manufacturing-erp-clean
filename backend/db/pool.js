@@ -17,6 +17,7 @@ export function isDatabaseError(error) {
 function decorateDatabaseError(error) {
   if (!isDatabaseError(error)) return error;
   error.statusCode = error.statusCode || 503;
+  error.isDatabaseUnavailable = true;
   error.publicMessage = "Database temporarily unavailable. The API is starting up or reconnecting.";
   error.retryable = true;
   return error;
